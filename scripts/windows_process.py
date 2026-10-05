@@ -3,10 +3,12 @@
 This module is used by the build harness and is not bundled into the application.
 """
 
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager
 import ctypes as ct
 from ctypes import wintypes as wt
+import os
 from pathlib import Path
+import secrets
 import subprocess
 
 
@@ -50,8 +52,32 @@ class ProcessInfo(ct.Structure):
     ]
 
 
+class UserInfo(ct.Structure):
+    _fields_ = [
+        ("name", wt.LPWSTR),
+        ("password", wt.LPWSTR),
+        ("password_age", wt.DWORD),
+        ("privilege", wt.DWORD),
+        ("home", wt.LPWSTR),
+        ("comment", wt.LPWSTR),
+        ("flags", wt.DWORD),
+        ("script", wt.LPWSTR),
+    ]
+
+
+class TokenPrivileges(ct.Structure):
+    _fields_ = [
+        ("count", wt.DWORD),
+        ("luid_low", wt.DWORD),
+        ("luid_high", wt.LONG),
+        ("attributes", wt.DWORD),
+    ]
+
+
 kernel32 = ct.WinDLL("kernel32", use_last_error=True)
 advapi32 = ct.WinDLL("advapi32", use_last_error=True)
+user32 = ct.WinDLL("user32", use_last_error=True)
+netapi32 = ct.WinDLL("netapi32", use_last_error=True)
 for dll, name, result, arguments in (
     (kernel32, "GetCurrentProcess", wt.HANDLE, []),
     (kernel32, "OpenProcess", wt.HANDLE, [wt.DWORD, wt.BOOL, wt.DWORD]),
@@ -80,46 +106,94 @@ for dll, name, result, arguments in (
         wt.BOOL,
         [wt.HANDLE, ct.c_int, ct.c_void_p, wt.DWORD, ct.POINTER(wt.DWORD)],
     ),
-    (advapi32, "SetTokenInformation", wt.BOOL, [wt.HANDLE, ct.c_int, ct.c_void_p, wt.DWORD]),
     (advapi32, "ConvertStringSidToSidW", wt.BOOL, [wt.LPCWSTR, ct.POINTER(ct.c_void_p)]),
+    (advapi32, "ConvertSidToStringSidW", wt.BOOL, [ct.c_void_p, ct.POINTER(ct.c_void_p)]),
     (advapi32, "EqualSid", wt.BOOL, [ct.c_void_p, ct.c_void_p]),
-    (advapi32, "GetLengthSid", wt.DWORD, [ct.c_void_p]),
     (advapi32, "GetSidSubAuthorityCount", ct.POINTER(ct.c_ubyte), [ct.c_void_p]),
     (advapi32, "GetSidSubAuthority", ct.POINTER(wt.DWORD), [ct.c_void_p, wt.DWORD]),
     (advapi32, "IsTokenRestricted", wt.BOOL, [wt.HANDLE]),
     (
         advapi32,
-        "CreateRestrictedToken",
+        "LogonUserW",
         wt.BOOL,
         [
-            wt.HANDLE,
+            wt.LPCWSTR,
+            wt.LPCWSTR,
+            wt.LPCWSTR,
             wt.DWORD,
             wt.DWORD,
-            ct.POINTER(SidAndAttributes),
-            wt.DWORD,
-            ct.c_void_p,
-            wt.DWORD,
-            ct.c_void_p,
             ct.POINTER(wt.HANDLE),
         ],
     ),
     (
         advapi32,
-        "CreateProcessAsUserW",
+        "CreateProcessWithLogonW",
         wt.BOOL,
         [
-            wt.HANDLE,
+            wt.LPCWSTR,
+            wt.LPCWSTR,
+            wt.LPCWSTR,
+            wt.DWORD,
             wt.LPCWSTR,
             wt.LPWSTR,
-            ct.c_void_p,
-            ct.c_void_p,
-            wt.BOOL,
             wt.DWORD,
             ct.c_void_p,
             wt.LPCWSTR,
             ct.POINTER(StartupInfo),
             ct.POINTER(ProcessInfo),
         ],
+    ),
+    (
+        advapi32,
+        "LookupAccountSidW",
+        wt.BOOL,
+        [
+            wt.LPCWSTR,
+            ct.c_void_p,
+            wt.LPWSTR,
+            ct.POINTER(wt.DWORD),
+            wt.LPWSTR,
+            ct.POINTER(wt.DWORD),
+            ct.POINTER(ct.c_int),
+        ],
+    ),
+    (advapi32, "LookupPrivilegeValueW", wt.BOOL, [wt.LPCWSTR, wt.LPCWSTR, ct.c_void_p]),
+    (
+        advapi32,
+        "AdjustTokenPrivileges",
+        wt.BOOL,
+        [wt.HANDLE, wt.BOOL, ct.c_void_p, wt.DWORD, ct.c_void_p, ct.POINTER(wt.DWORD)],
+    ),
+    (
+        advapi32,
+        "ConvertSecurityDescriptorToStringSecurityDescriptorW",
+        wt.BOOL,
+        [ct.c_void_p, wt.DWORD, wt.DWORD, ct.POINTER(ct.c_void_p), ct.c_void_p],
+    ),
+    (
+        advapi32,
+        "ConvertStringSecurityDescriptorToSecurityDescriptorW",
+        wt.BOOL,
+        [wt.LPCWSTR, wt.DWORD, ct.POINTER(ct.c_void_p), ct.c_void_p],
+    ),
+    (user32, "OpenWindowStationW", wt.HANDLE, [wt.LPCWSTR, wt.BOOL, wt.DWORD]),
+    (user32, "CloseWindowStation", wt.BOOL, [wt.HANDLE]),
+    (user32, "OpenDesktopW", wt.HANDLE, [wt.LPCWSTR, wt.DWORD, wt.BOOL, wt.DWORD]),
+    (user32, "CloseDesktop", wt.BOOL, [wt.HANDLE]),
+    (
+        user32,
+        "GetUserObjectSecurity",
+        wt.BOOL,
+        [wt.HANDLE, ct.POINTER(wt.DWORD), ct.c_void_p, wt.DWORD, ct.POINTER(wt.DWORD)],
+    ),
+    (user32, "SetUserObjectSecurity", wt.BOOL, [wt.HANDLE, ct.POINTER(wt.DWORD), ct.c_void_p]),
+    (netapi32, "NetUserAdd", wt.DWORD, [wt.LPCWSTR, wt.DWORD, ct.c_void_p, ct.POINTER(wt.DWORD)]),
+    (netapi32, "NetUserDel", wt.DWORD, [wt.LPCWSTR, wt.LPCWSTR]),
+    (
+        netapi32,
+        "NetLocalGroupAddMembers",
+        wt.DWORD,
+        [wt.LPCWSTR, wt.LPCWSTR, wt.DWORD, ct.c_void_p, wt.DWORD],
     ),
 ):
     function = getattr(dll, name)
@@ -167,11 +241,20 @@ def token_security(token):
             group = SidAndAttributes.from_buffer(groups_buffer, offset)
             if advapi32.EqualSid(group.sid, administrators) and group.attributes & 0x4:
                 admin_enabled = True
+    user_buffer = token_information(token, 1)
+    user_sid = SidAndAttributes.from_buffer(user_buffer).sid
+    sid_string = ct.c_void_p()
+    require(advapi32.ConvertSidToStringSidW(user_sid, ct.byref(sid_string)))
+    try:
+        user_sid_string = ct.wstring_at(sid_string)
+    finally:
+        kernel32.LocalFree(sid_string)
     return {
         "elevated": bool(elevation),
         "administrators_enabled": admin_enabled,
         "integrity_rid": integrity,
         "restricted": bool(advapi32.IsTokenRestricted(token)),
+        "user_sid": user_sid_string,
     }
 
 
@@ -252,32 +335,130 @@ class LimitedProcess:
         kernel32.CloseHandle(self.handle)
 
 
-def launch_unprivileged(binary: Path, directory: str, environment: dict[str, str]):
-    current = wt.HANDLE()
-    limited = wt.HANDLE()
-    # QUERY | DUPLICATE | ASSIGN_PRIMARY | ADJUST_DEFAULT, for our own process token.
-    require(advapi32.OpenProcessToken(kernel32.GetCurrentProcess(), 0x8B, ct.byref(current)))
+@contextmanager
+def debug_inspection():
+    """Let the CI harness inspect another user's process; restore its own privilege."""
+    token = wt.HANDLE()
+    require(advapi32.OpenProcessToken(kernel32.GetCurrentProcess(), 0x28, ct.byref(token)))
+    previous = TokenPrivileges()
     try:
-        security = token_security(current)
-        if not security["elevated"] and not security["administrators_enabled"]:
-            assert_unprivileged(security)
-            return subprocess.Popen([str(binary)], cwd=directory, env=environment)
-        with sid("S-1-5-32-544") as administrators:
-            disabled = SidAndAttributes(administrators.value, 0)
-            # Remove privileges and disable Administrators explicitly; keep policy enforcement.
+        enabled = TokenPrivileges(count=1, attributes=2)  # SE_PRIVILEGE_ENABLED
+        require(
+            advapi32.LookupPrivilegeValueW(
+                None, "SeDebugPrivilege", ct.byref(enabled, TokenPrivileges.luid_low.offset)
+            )
+        )
+        size = wt.DWORD()
+        ct.set_last_error(0)
+        require(
+            advapi32.AdjustTokenPrivileges(
+                token,
+                False,
+                ct.byref(enabled),
+                ct.sizeof(previous),
+                ct.byref(previous),
+                ct.byref(size),
+            )
+        )
+        if ct.get_last_error():
+            raise ct.WinError(ct.get_last_error())
+        try:
+            yield
+        finally:
+            require(advapi32.AdjustTokenPrivileges(token, False, ct.byref(previous), 0, None, None))
+    finally:
+        kernel32.CloseHandle(token)
+
+
+@contextmanager
+def desktop_access(user_sid):
+    """Temporarily grant only the test account access to the existing CI desktop."""
+    with ExitStack() as cleanup:
+        for open_object, close_object, mask in (
+            (
+                lambda: user32.OpenWindowStationW("winsta0", False, 0x60000),
+                user32.CloseWindowStation,
+                "0x000f037f",
+            ),
+            (
+                lambda: user32.OpenDesktopW("default", 0, False, 0x60000),
+                user32.CloseDesktop,
+                "0x000f01ff",
+            ),
+        ):
+            handle = open_object()
+            require(handle)
+            cleanup.callback(close_object, handle)
+            information = wt.DWORD(4)  # DACL_SECURITY_INFORMATION
+            size = wt.DWORD()
+            user32.GetUserObjectSecurity(handle, ct.byref(information), None, 0, ct.byref(size))
+            if not size.value:
+                raise ct.WinError(ct.get_last_error())
+            original = ct.create_string_buffer(size.value)
             require(
-                advapi32.CreateRestrictedToken(
-                    current, 0x1, 1, ct.byref(disabled), 0, None, 0, None, ct.byref(limited)
+                user32.GetUserObjectSecurity(
+                    handle, ct.byref(information), original, size, ct.byref(size)
                 )
             )
-        with sid("S-1-16-8192") as medium:
-            label = SidAndAttributes(medium.value, 0x20)  # SE_GROUP_INTEGRITY
+            descriptor_string = ct.c_void_p()
             require(
-                advapi32.SetTokenInformation(
-                    limited, 25, ct.byref(label), ct.sizeof(label) + advapi32.GetLengthSid(medium)
+                advapi32.ConvertSecurityDescriptorToStringSecurityDescriptorW(
+                    original, 1, 4, ct.byref(descriptor_string), None
                 )
             )
-        assert_unprivileged(token_security(limited))
+            try:
+                modified = ct.wstring_at(descriptor_string) + f"(A;;{mask};;;{user_sid})"
+            finally:
+                kernel32.LocalFree(descriptor_string)
+            descriptor = ct.c_void_p()
+            require(
+                advapi32.ConvertStringSecurityDescriptorToSecurityDescriptorW(
+                    modified, 1, ct.byref(descriptor), None
+                )
+            )
+            try:
+                require(user32.SetUserObjectSecurity(handle, ct.byref(information), descriptor))
+            finally:
+                kernel32.LocalFree(descriptor)
+            cleanup.callback(restore_desktop_acl, handle, original)
+        yield
+
+
+def restore_desktop_acl(handle, descriptor):
+    information = wt.DWORD(4)
+    require(user32.SetUserObjectSecurity(handle, ct.byref(information), descriptor))
+
+
+def add_to_users(name):
+    with sid("S-1-5-32-545") as users:
+        group = ct.create_unicode_buffer(256)
+        domain = ct.create_unicode_buffer(256)
+        group_size, domain_size = wt.DWORD(256), wt.DWORD(256)
+        account_type = ct.c_int()
+        require(
+            advapi32.LookupAccountSidW(
+                None,
+                users,
+                group,
+                ct.byref(group_size),
+                domain,
+                ct.byref(domain_size),
+                ct.byref(account_type),
+            )
+        )
+    member = wt.LPWSTR(f"{os.environ['COMPUTERNAME']}\\{name}")
+    result = netapi32.NetLocalGroupAddMembers(None, group.value, 3, ct.byref(member), 1)
+    if result not in (0, 1378):  # ERROR_MEMBER_IN_ALIAS: already a member
+        raise ct.WinError(result)
+
+
+class StandardAccount:
+    def __init__(self, name, password, user_sid):
+        self.name = name
+        self.password = password
+        self.sid = user_sid
+
+    def launch(self, binary: Path, directory: str, environment: dict[str, str]):
         startup = StartupInfo(cb=ct.sizeof(StartupInfo), desktop="winsta0\\default")
         info = ProcessInfo()
         command = ct.create_unicode_buffer(subprocess.list2cmdline([str(binary)]))
@@ -289,13 +470,13 @@ def launch_unprivileged(binary: Path, directory: str, environment: dict[str, str
             + "\0\0"
         )
         require(
-            advapi32.CreateProcessAsUserW(
-                limited,
+            advapi32.CreateProcessWithLogonW(
+                self.name,
+                ".",
+                self.password,
+                0,
                 str(binary),
                 command,
-                None,
-                None,
-                False,
                 0x404,  # CREATE_UNICODE_ENVIRONMENT | CREATE_SUSPENDED
                 block,
                 directory,
@@ -305,7 +486,9 @@ def launch_unprivileged(binary: Path, directory: str, environment: dict[str, str
         )
         process = LimitedProcess(info)
         try:
-            assert_unprivileged(process_security(info.pid))
+            security = process_security(info.pid)
+            assert_unprivileged(security)
+            assert security["user_sid"] == self.sid, "EXE did not run as the test account"
             if kernel32.ResumeThread(info.thread) == 0xFFFFFFFF:
                 raise ct.WinError(ct.get_last_error())
         except BaseException:
@@ -316,7 +499,58 @@ def launch_unprivileged(binary: Path, directory: str, environment: dict[str, str
         finally:
             kernel32.CloseHandle(info.thread)
         return process
+
+
+@contextmanager
+def unprivileged_launcher(directory: Path):
+    """Use the current standard user, or a disposable account on hosted GitHub CI."""
+    current = wt.HANDLE()
+    require(advapi32.OpenProcessToken(kernel32.GetCurrentProcess(), 0x8, ct.byref(current)))
+    try:
+        security = token_security(current)
     finally:
-        if limited:
-            kernel32.CloseHandle(limited)
         kernel32.CloseHandle(current)
+    if not security["elevated"] and not security["administrators_enabled"]:
+        assert_unprivileged(security)
+        yield lambda binary, cwd, env: subprocess.Popen([str(binary)], cwd=cwd, env=env)
+        return
+    assert (
+        os.environ.get("GITHUB_ACTIONS") == "true"
+        and os.environ.get("RUNNER_ENVIRONMENT") == "github-hosted"
+    ), "Run local smoke as a standard user; account creation is hosted-CI only"
+    name = "macsmoke_" + secrets.token_hex(4)
+    password = ct.create_unicode_buffer("Aa9!" + secrets.token_urlsafe(24))
+    account = UserInfo(
+        name=name,
+        password=ct.cast(password, wt.LPWSTR),
+        privilege=1,
+        comment="Temporary MAC converter EXE test",
+        flags=0x10201,
+    )
+    parameter_error = wt.DWORD()
+    result = netapi32.NetUserAdd(None, 1, ct.byref(account), ct.byref(parameter_error))
+    if result:
+        ct.memset(password, 0, ct.sizeof(password))
+        raise ct.WinError(result)
+    token = wt.HANDLE()
+    try:
+        add_to_users(name)
+        require(advapi32.LogonUserW(name, ".", password, 2, 0, ct.byref(token)))
+        security = token_security(token)
+        assert_unprivileged(security)
+        user_sid = security["user_sid"]
+        icacls = Path(os.environ["SystemRoot"]) / "System32/icacls.exe"
+        subprocess.run(
+            [str(icacls), str(directory), "/grant", f"*{user_sid}:(OI)(CI)M"],
+            check=True,
+            capture_output=True,
+        )
+        with debug_inspection(), desktop_access(user_sid):
+            yield StandardAccount(name, password, user_sid).launch
+    finally:
+        if token:
+            kernel32.CloseHandle(token)
+        ct.memset(password, 0, ct.sizeof(password))
+        result = netapi32.NetUserDel(None, name)
+        if result:
+            raise ct.WinError(result)

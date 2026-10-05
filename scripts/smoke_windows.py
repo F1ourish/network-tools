@@ -77,7 +77,7 @@ def run_ui_checks(binary: Path) -> tuple[list[str], list[dict]]:
     from windows_process import (
         LimitedProcess,
         assert_unprivileged,
-        launch_unprivileged,
+        unprivileged_launcher,
         process_runtime,
         process_security,
     )
@@ -352,114 +352,127 @@ def run_ui_checks(binary: Path) -> tuple[list[str], list[dict]]:
     environment["PATH"] = str(Path(environment.get("SystemRoot", "C:/Windows")) / "System32")
     try:
         with tempfile.TemporaryDirectory(prefix="MAC portable тест ") as temporary:
-            isolated = Path(temporary) / binary.name
+            application = Path(temporary) / "application"
+            application.mkdir()
+            isolated = application / binary.name
+            for key in ("TEMP", "TMP", "USERPROFILE", "APPDATA", "LOCALAPPDATA"):
+                folder = Path(temporary) / key.lower()
+                folder.mkdir()
+                environment[key] = str(folder)
             shutil.copy2(binary, isolated)
-            for launch in range(2):
-                process = launch_unprivileged(isolated, temporary, environment)
-                hwnd = None
-                try:
+            with unprivileged_launcher(Path(temporary)) as launch_unprivileged:
+                for launch in range(2):
+                    process = launch_unprivileged(isolated, str(application), environment)
+                    hwnd = None
+                    try:
 
-                    def appeared():
-                        assert process.poll() is None, (
-                            f"EXE exited before showing a window: {process.returncode}"
+                        def appeared():
+                            assert process.poll() is None, (
+                                f"EXE exited before showing a window: {process.returncode}"
+                            )
+                            return find_window(isolated.resolve())
+
+                        hwnd = wait_until(appeared, timeout=60)
+                        user32.ShowWindow(hwnd, 9)
+                        user32.SetForegroundWindow(hwnd)
+                        wait_until(lambda: user32.GetForegroundWindow() == hwnd)
+                        pid = wt.DWORD()
+                        user32.GetWindowThreadProcessId(hwnd, ct.byref(pid))
+                        security = process_security(pid.value)
+                        assert_unprivileged(security)
+                        security["runtime_dlls"] = process_runtime(pid.value)
+                        execution_tokens.append(security)
+                        checks.append(
+                            f"Launch {launch + 1}: GUI in isolated folder with spaces/Unicode"
                         )
-                        return find_window(isolated.resolve())
+                        checks.append(
+                            f"Launch {launch + 1}: non-elevated, no enabled admin SID, medium integrity"
+                        )
+                        checks.append(
+                            f"Launch {launch + 1}: Python/Tcl/Tk DLLs loaded from the EXE bundle"
+                        )
+                        if launch == 1:
+                            paste("AABB.CCDD.EEFF")
+                            assert_result("aa:bb:cc:dd:ee:ff")
+                            checks.append("Reopen: default Colon/lowercase restored")
+                            continue
 
-                    hwnd = wait_until(appeared, timeout=60)
-                    user32.ShowWindow(hwnd, 9)
-                    user32.SetForegroundWindow(hwnd)
-                    wait_until(lambda: user32.GetForegroundWindow() == hwnd)
-                    pid = wt.DWORD()
-                    user32.GetWindowThreadProcessId(hwnd, ct.byref(pid))
-                    security = process_security(pid.value)
-                    assert_unprivileged(security)
-                    security["runtime_dlls"] = process_runtime(pid.value)
-                    execution_tokens.append(security)
-                    checks.append(
-                        f"Launch {launch + 1}: GUI in isolated folder with spaces/Unicode"
-                    )
-                    checks.append(
-                        f"Launch {launch + 1}: non-elevated, no enabled admin SID, medium integrity"
-                    )
-                    checks.append(
-                        f"Launch {launch + 1}: Python/Tcl/Tk DLLs loaded from the EXE bundle"
-                    )
-                    if launch == 1:
-                        paste("AABB.CCDD.EEFF")
-                        assert_result("aa:bb:cc:dd:ee:ff")
-                        checks.append("Reopen: default Colon/lowercase restored")
-                        continue
-
-                    paste("0011.2233.aabb")
-                    assert_result("00:11:22:33:aa:bb")
-                    checks.append("Ctrl+L / Ctrl+V / Ctrl+A / Ctrl+C; live Colon conversion")
-                    save_screenshot(hwnd, Path("smoke-results/windows-exe.png"))
-                    checks.append("Screenshot of actual EXE saved")
-                    for tabs, expected in (
-                        (1, "0011.2233.aabb"),
-                        (3, "00-11-22-33-aa-bb"),
-                        (4, "00112233aabb"),
-                        (2, "00:11:22:33:aa:bb"),
-                    ):
-                        focus_control(tabs)
+                        paste("0011.2233.aabb")
+                        assert_result("00:11:22:33:aa:bb")
+                        checks.append("Ctrl+L / Ctrl+V / Ctrl+A / Ctrl+C; live Colon conversion")
+                        save_screenshot(hwnd, Path("smoke-results/windows-exe.png"))
+                        checks.append("Screenshot of actual EXE saved")
+                        for tabs, expected in (
+                            (1, "0011.2233.aabb"),
+                            (3, "00-11-22-33-aa-bb"),
+                            (4, "00112233aabb"),
+                            (2, "00:11:22:33:aa:bb"),
+                        ):
+                            focus_control(tabs)
+                            keys(0x20)
+                            assert_result(expected)
+                        checks.append("Cisco, Hyphen, Plain and Colon selection")
+                        focus_control(5)
                         keys(0x20)
-                        assert_result(expected)
-                    checks.append("Cisco, Hyphen, Plain and Colon selection")
-                    focus_control(5)
-                    keys(0x20)
-                    assert_result("00:11:22:33:AA:BB")
-                    focus_control(1)
-                    keys(0x20)
-                    assert_result("0011.2233.AABB")
-                    checks.append("UPPERCASE in Colon and Cisco")
+                        assert_result("00:11:22:33:AA:BB")
+                        focus_control(1)
+                        keys(0x20)
+                        assert_result("0011.2233.AABB")
+                        checks.append("UPPERCASE in Colon and Cisco")
 
-                    write_clipboard("copy button sentinel")
-                    focus_control(7)
-                    keys(0x20)
-                    wait_until(lambda: read_clipboard() == "0011.2233.AABB")
-                    checks.append("Copy button: clipboard contains only formatted result")
+                        write_clipboard("copy button sentinel")
+                        focus_control(7)
+                        keys(0x20)
+                        wait_until(lambda: read_clipboard() == "0011.2233.AABB")
+                        checks.append("Copy button: clipboard contains only formatted result")
 
-                    paste("00:11:22:ZZ:44:55")
-                    assert_result("smoke clipboard sentinel")
-                    assert user32.IsWindowVisible(hwnd), "Invalid input closed the application"
-                    paste("aabb.ccdd.eeff")
-                    assert_result("AABB.CCDD.EEFF")
-                    checks.append("Invalid input clears result; application recovers")
-                except BaseException as error:
-                    target = Path("smoke-results")
-                    target.mkdir(exist_ok=True)
-                    windows = describe_windows(isolated.resolve())
-                    diagnostic = {
-                        "error": str(error),
-                        "process_exit": process.poll(),
-                        "windows": windows,
-                    }
-                    (target / "failure.json").write_text(
-                        json.dumps(diagnostic, indent=2), encoding="utf-8"
-                    )
-                    print(f"EXE smoke failure: {json.dumps(diagnostic)}", flush=True)
-                    if windows:
-                        try:
-                            save_screenshot(windows[0]["hwnd"], target / "failure.png")
-                        except Exception as capture_error:
-                            print(f"Failure screenshot unavailable: {capture_error}", flush=True)
-                    raise
-                finally:
-                    failed = sys.exc_info()[0] is not None
-                    if hwnd:
-                        user32.PostMessageW(hwnd, 0x0010, 0, 0)  # WM_CLOSE
-                    try:
-                        process.wait(timeout=10)
-                    except subprocess.TimeoutExpired:
-                        process.kill()
-                        process.wait(timeout=5)
-                    try:
-                        if not failed:
-                            assert process.returncode == 0, f"EXE exited with {process.returncode}"
+                        paste("00:11:22:ZZ:44:55")
+                        assert_result("smoke clipboard sentinel")
+                        assert user32.IsWindowVisible(hwnd), "Invalid input closed the application"
+                        paste("aabb.ccdd.eeff")
+                        assert_result("AABB.CCDD.EEFF")
+                        checks.append("Invalid input clears result; application recovers")
+                    except BaseException as error:
+                        target = Path("smoke-results")
+                        target.mkdir(exist_ok=True)
+                        windows = describe_windows(isolated.resolve())
+                        diagnostic = {
+                            "error": str(error),
+                            "process_exit": process.poll(),
+                            "windows": windows,
+                        }
+                        (target / "failure.json").write_text(
+                            json.dumps(diagnostic, indent=2), encoding="utf-8"
+                        )
+                        print(f"EXE smoke failure: {json.dumps(diagnostic)}", flush=True)
+                        if windows:
+                            try:
+                                save_screenshot(windows[0]["hwnd"], target / "failure.png")
+                            except Exception as capture_error:
+                                print(
+                                    f"Failure screenshot unavailable: {capture_error}", flush=True
+                                )
+                        raise
                     finally:
-                        if isinstance(process, LimitedProcess):
-                            process.close()
+                        failed = sys.exc_info()[0] is not None
+                        if hwnd:
+                            user32.PostMessageW(hwnd, 0x0010, 0, 0)  # WM_CLOSE
+                        try:
+                            process.wait(timeout=10)
+                        except subprocess.TimeoutExpired:
+                            process.kill()
+                            process.wait(timeout=5)
+                        try:
+                            if not failed:
+                                assert process.returncode == 0, (
+                                    f"EXE exited with {process.returncode}"
+                                )
+                        finally:
+                            if isinstance(process, LimitedProcess):
+                                process.close()
             checks.append("Close and restart: exit code 0")
+            assert list(application.iterdir()) == [isolated], "EXE wrote files beside itself"
+            checks.append("Portable application folder still contains only the EXE")
     finally:
         if previous_text is not None:
             write_clipboard(previous_text)
