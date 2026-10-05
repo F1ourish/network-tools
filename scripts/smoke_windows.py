@@ -23,6 +23,7 @@ import xml.etree.ElementTree as ET
 def verify_binary(binary: Path) -> list[str]:
     import pefile
     from PyInstaller.archive.readers import CArchiveReader
+    from mac_converter import __version__
 
     checks = []
     with pefile.PE(str(binary)) as pe:
@@ -45,7 +46,15 @@ def verify_binary(binary: Path) -> list[str]:
         assert levels == ["asInvoker"], f"Unexpected execution level: {levels}"
         checks.append("Embedded manifest: asInvoker")
         assert getattr(pe, "VS_FIXEDFILEINFO", None), "Missing Windows version resource"
-        checks.append("Windows version resource present")
+        fixed = pe.VS_FIXEDFILEINFO[0]
+        actual_version = (
+            fixed.FileVersionMS >> 16,
+            fixed.FileVersionMS & 0xFFFF,
+            fixed.FileVersionLS >> 16,
+            fixed.FileVersionLS & 0xFFFF,
+        )
+        assert actual_version == tuple(int(part) for part in __version__.split(".")) + (0,)
+        checks.append(f"Windows version resource matches application {__version__}")
 
     names = {name.lower().replace("\\", "/") for name in CArchiveReader(str(binary)).toc}
     for required in (
@@ -69,6 +78,7 @@ def run_ui_checks(binary: Path) -> tuple[list[str], list[dict]]:
         LimitedProcess,
         assert_unprivileged,
         launch_unprivileged,
+        process_runtime,
         process_security,
     )
 
@@ -105,6 +115,7 @@ def run_ui_checks(binary: Path) -> tuple[list[str], list[dict]]:
 
     callback_type = ct.WINFUNCTYPE(wt.BOOL, wt.HWND, wt.LPARAM)
     user32.EnumWindows.argtypes = [callback_type, wt.LPARAM]
+    user32.EnumChildWindows.argtypes = [wt.HWND, callback_type, wt.LPARAM]
     user32.GetWindowTextW.argtypes = [wt.HWND, wt.LPWSTR, ct.c_int]
     user32.GetWindowThreadProcessId.argtypes = [wt.HWND, ct.POINTER(wt.DWORD)]
     user32.GetClassNameW.argtypes = [wt.HWND, wt.LPWSTR, ct.c_int]
@@ -112,6 +123,7 @@ def run_ui_checks(binary: Path) -> tuple[list[str], list[dict]]:
     user32.SetForegroundWindow.argtypes = [wt.HWND]
     user32.GetForegroundWindow.restype = wt.HWND
     user32.ShowWindow.argtypes = [wt.HWND, ct.c_int]
+    user32.GetWindowRect.argtypes = [wt.HWND, ct.POINTER(wt.RECT)]
     user32.PostMessageW.argtypes = [wt.HWND, wt.UINT, wt.WPARAM, wt.LPARAM]
     user32.SendInput.argtypes = [wt.UINT, ct.POINTER(Input), ct.c_int]
     user32.SendInput.restype = wt.UINT
@@ -261,6 +273,76 @@ def run_ui_checks(binary: Path) -> tuple[list[str], list[dict]]:
         user32.EnumWindows(visit, 0)
         return matches[0] if matches else None
 
+    def describe_windows(expected_path):
+        windows = []
+
+        @callback_type
+        def visit(hwnd, _parameter):
+            pid = wt.DWORD()
+            user32.GetWindowThreadProcessId(hwnd, ct.byref(pid))
+            handle = kernel32.OpenProcess(0x1000, False, pid.value)
+            if not handle:
+                return True
+            try:
+                path = ct.create_unicode_buffer(32768)
+                size = wt.DWORD(len(path))
+                if not kernel32.QueryFullProcessImageNameW(handle, 0, path, ct.byref(size)):
+                    return True
+                if Path(path.value).resolve() != expected_path or not user32.IsWindowVisible(hwnd):
+                    return True
+                title = ct.create_unicode_buffer(4096)
+                user32.GetWindowTextW(hwnd, title, len(title))
+                children = []
+
+                @callback_type
+                def child(child_hwnd, _child_parameter):
+                    text = ct.create_unicode_buffer(8192)
+                    user32.GetWindowTextW(child_hwnd, text, len(text))
+                    if text.value:
+                        children.append(text.value)
+                    return True
+
+                user32.EnumChildWindows(hwnd, child, 0)
+                windows.append(
+                    {"hwnd": hwnd, "pid": pid.value, "title": title.value, "text": children}
+                )
+            finally:
+                kernel32.CloseHandle(handle)
+            return True
+
+        user32.EnumWindows(visit, 0)
+        return windows
+
+    def save_screenshot(hwnd, destination):
+        rectangle = wt.RECT()
+        if not user32.GetWindowRect(hwnd, ct.byref(rectangle)):
+            raise ct.WinError(ct.get_last_error())
+        destination.parent.mkdir(exist_ok=True)
+        escaped = str(destination.resolve()).replace("'", "''")
+        script = "\n".join(
+            (
+                "$ErrorActionPreference = 'Stop'",
+                "Add-Type -AssemblyName System.Drawing",
+                f"$image = [System.Drawing.Bitmap]::new({rectangle.right - rectangle.left}, {rectangle.bottom - rectangle.top})",
+                "$drawing = [System.Drawing.Graphics]::FromImage($image)",
+                "try {",
+                f"$drawing.CopyFromScreen({rectangle.left}, {rectangle.top}, 0, 0, $image.Size)",
+                f"$image.Save('{escaped}', [System.Drawing.Imaging.ImageFormat]::Png)",
+                "} finally { $drawing.Dispose(); $image.Dispose() }",
+            )
+        )
+        powershell = (
+            Path(os.environ["SystemRoot"]) / "System32/WindowsPowerShell/v1.0/powershell.exe"
+        )
+        subprocess.run(
+            [str(powershell), "-NoProfile", "-NonInteractive", "-Command", script],
+            check=True,
+            capture_output=True,
+            text=True,
+            creationflags=0x08000000,
+        )
+        assert destination.is_file(), "Screenshot was not saved"
+
     checks = []
     execution_tokens = []
     previous_text = read_clipboard()
@@ -276,7 +358,14 @@ def run_ui_checks(binary: Path) -> tuple[list[str], list[dict]]:
                 process = launch_unprivileged(isolated, temporary, environment)
                 hwnd = None
                 try:
-                    hwnd = wait_until(lambda: find_window(isolated.resolve()), timeout=30)
+
+                    def appeared():
+                        assert process.poll() is None, (
+                            f"EXE exited before showing a window: {process.returncode}"
+                        )
+                        return find_window(isolated.resolve())
+
+                    hwnd = wait_until(appeared, timeout=60)
                     user32.ShowWindow(hwnd, 9)
                     user32.SetForegroundWindow(hwnd)
                     wait_until(lambda: user32.GetForegroundWindow() == hwnd)
@@ -284,12 +373,16 @@ def run_ui_checks(binary: Path) -> tuple[list[str], list[dict]]:
                     user32.GetWindowThreadProcessId(hwnd, ct.byref(pid))
                     security = process_security(pid.value)
                     assert_unprivileged(security)
+                    security["runtime_dlls"] = process_runtime(pid.value)
                     execution_tokens.append(security)
                     checks.append(
                         f"Launch {launch + 1}: GUI in isolated folder with spaces/Unicode"
                     )
                     checks.append(
                         f"Launch {launch + 1}: non-elevated, no enabled admin SID, medium integrity"
+                    )
+                    checks.append(
+                        f"Launch {launch + 1}: Python/Tcl/Tk DLLs loaded from the EXE bundle"
                     )
                     if launch == 1:
                         paste("AABB.CCDD.EEFF")
@@ -300,6 +393,8 @@ def run_ui_checks(binary: Path) -> tuple[list[str], list[dict]]:
                     paste("0011.2233.aabb")
                     assert_result("00:11:22:33:aa:bb")
                     checks.append("Ctrl+L / Ctrl+V / Ctrl+A / Ctrl+C; live Colon conversion")
+                    save_screenshot(hwnd, Path("smoke-results/windows-exe.png"))
+                    checks.append("Screenshot of actual EXE saved")
                     for tabs, expected in (
                         (1, "0011.2233.aabb"),
                         (3, "00-11-22-33-aa-bb"),
@@ -330,7 +425,27 @@ def run_ui_checks(binary: Path) -> tuple[list[str], list[dict]]:
                     paste("aabb.ccdd.eeff")
                     assert_result("AABB.CCDD.EEFF")
                     checks.append("Invalid input clears result; application recovers")
+                except BaseException as error:
+                    target = Path("smoke-results")
+                    target.mkdir(exist_ok=True)
+                    windows = describe_windows(isolated.resolve())
+                    diagnostic = {
+                        "error": str(error),
+                        "process_exit": process.poll(),
+                        "windows": windows,
+                    }
+                    (target / "failure.json").write_text(
+                        json.dumps(diagnostic, indent=2), encoding="utf-8"
+                    )
+                    print(f"EXE smoke failure: {json.dumps(diagnostic)}", flush=True)
+                    if windows:
+                        try:
+                            save_screenshot(windows[0]["hwnd"], target / "failure.png")
+                        except Exception as capture_error:
+                            print(f"Failure screenshot unavailable: {capture_error}", flush=True)
+                    raise
                 finally:
+                    failed = sys.exc_info()[0] is not None
                     if hwnd:
                         user32.PostMessageW(hwnd, 0x0010, 0, 0)  # WM_CLOSE
                     try:
@@ -339,7 +454,8 @@ def run_ui_checks(binary: Path) -> tuple[list[str], list[dict]]:
                         process.kill()
                         process.wait(timeout=5)
                     try:
-                        assert process.returncode == 0, f"EXE exited with {process.returncode}"
+                        if not failed:
+                            assert process.returncode == 0, f"EXE exited with {process.returncode}"
                     finally:
                         if isinstance(process, LimitedProcess):
                             process.close()

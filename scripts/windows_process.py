@@ -61,6 +61,18 @@ for dll, name, result, arguments in (
     (kernel32, "GetExitCodeProcess", wt.BOOL, [wt.HANDLE, ct.POINTER(wt.DWORD)]),
     (kernel32, "TerminateProcess", wt.BOOL, [wt.HANDLE, wt.UINT]),
     (kernel32, "ResumeThread", wt.DWORD, [wt.HANDLE]),
+    (
+        kernel32,
+        "K32EnumProcessModules",
+        wt.BOOL,
+        [wt.HANDLE, ct.POINTER(wt.HMODULE), wt.DWORD, ct.POINTER(wt.DWORD)],
+    ),
+    (
+        kernel32,
+        "K32GetModuleFileNameExW",
+        wt.DWORD,
+        [wt.HANDLE, wt.HMODULE, wt.LPWSTR, wt.DWORD],
+    ),
     (advapi32, "OpenProcessToken", wt.BOOL, [wt.HANDLE, wt.DWORD, ct.POINTER(wt.HANDLE)]),
     (
         advapi32,
@@ -182,11 +194,44 @@ def process_security(pid):
         kernel32.CloseHandle(process)
 
 
+def process_runtime(pid):
+    process = kernel32.OpenProcess(0x410, False, pid)  # QUERY_INFORMATION | VM_READ
+    require(process)
+    try:
+        modules = (wt.HMODULE * 2048)()
+        needed = wt.DWORD()
+        require(
+            kernel32.K32EnumProcessModules(process, modules, ct.sizeof(modules), ct.byref(needed))
+        )
+        assert needed.value <= ct.sizeof(modules), "DLL inspection buffer is too small"
+        required = {"python312.dll", "_tkinter.pyd", "tcl86t.dll", "tk86t.dll"}
+        found = {}
+        for module in modules[: needed.value // ct.sizeof(wt.HMODULE)]:
+            path = ct.create_unicode_buffer(32768)
+            require(kernel32.K32GetModuleFileNameExW(process, module, path, len(path)))
+            item = Path(path.value)
+            if item.name.lower() in required:
+                assert item.parent.name.startswith("_MEI"), (
+                    f"Runtime was loaded outside the bundle: {item}"
+                )
+                found[item.name.lower()] = f"{item.parent.name}/{item.name}"
+        assert set(found) == required, f"Missing loaded runtime DLLs: {required - set(found)}"
+        return found
+    finally:
+        kernel32.CloseHandle(process)
+
+
 class LimitedProcess:
     def __init__(self, info):
         self.handle = info.process
         self.pid = info.pid
         self.returncode = None
+
+    def poll(self):
+        code = wt.DWORD()
+        require(kernel32.GetExitCodeProcess(self.handle, ct.byref(code)))
+        self.returncode = None if code.value == 259 else code.value
+        return self.returncode
 
     def wait(self, timeout=None):
         milliseconds = 0xFFFFFFFF if timeout is None else int(timeout * 1000)
@@ -219,10 +264,10 @@ def launch_unprivileged(binary: Path, directory: str, environment: dict[str, str
             return subprocess.Popen([str(binary)], cwd=directory, env=environment)
         with sid("S-1-5-32-544") as administrators:
             disabled = SidAndAttributes(administrators.value, 0)
-            # DISABLE_MAX_PRIVILEGE | LUA_TOKEN; keep policy enforcement enabled.
+            # Remove privileges and disable Administrators explicitly; keep policy enforcement.
             require(
                 advapi32.CreateRestrictedToken(
-                    current, 0x5, 1, ct.byref(disabled), 0, None, 0, None, ct.byref(limited)
+                    current, 0x1, 1, ct.byref(disabled), 0, None, 0, None, ct.byref(limited)
                 )
             )
         with sid("S-1-16-8192") as medium:
