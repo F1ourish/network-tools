@@ -1,0 +1,14 @@
+# Exact direct and transitive versions for Python 3.12, Windows x64 / Linux x64.
+pytest==8.4.2
+ruff==0.13.3
+iniconfig==2.3.0
+packaging==26.3
+pluggy==1.6.0
+Pygments==2.21.0
+colorama==0.4.6; sys_platform == "win32"
+PyInstaller==6.22.3
+altgraph==0.17.5
+pyinstaller-hooks-contrib==2026.8
+setuptools==84.0.0
+pefile==2024.8.26; sys_platform == "win32"
+pywin32-ctypes==0.2.3; sys_platform == "win32"

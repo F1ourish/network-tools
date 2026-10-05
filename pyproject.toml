@@ -1,0 +1,34 @@
+[build-system]
+requires = ["setuptools==84.0.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mac-address-converter"
+dynamic = ["version"]
+description = "Portable Tkinter MAC-48 address converter"
+readme = "README.md"
+requires-python = ">=3.12"
+license = "MIT"
+dependencies = []
+
+[project.scripts]
+macconv = "mac_converter.cli:main"
+
+[project.gui-scripts]
+mac-address-converter = "mac_converter.main:main"
+
+[tool.setuptools.dynamic]
+version = {attr = "mac_converter.__version__"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+addopts = "--strict-markers"
+markers = ["gui: requires a real Tk display (Windows desktop or Xvfb)"]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
