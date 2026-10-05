@@ -148,6 +148,10 @@ def run_ui_checks(binary: Path) -> tuple[list[str], list[dict]]:
     ]
     user32.CreateWindowExW.restype = wt.HWND
     user32.DestroyWindow.argtypes = [wt.HWND]
+    user32.PeekMessageW.argtypes = [ct.POINTER(wt.MSG), wt.HWND, wt.UINT, wt.UINT, wt.UINT]
+    user32.TranslateMessage.argtypes = [ct.POINTER(wt.MSG)]
+    user32.DispatchMessageW.argtypes = [ct.POINTER(wt.MSG)]
+    user32.DispatchMessageW.restype = ct.c_ssize_t
     kernel32.GlobalAlloc.argtypes = [wt.UINT, ct.c_size_t]
     kernel32.GlobalAlloc.restype = wt.HGLOBAL
     kernel32.GlobalLock.argtypes = [wt.HGLOBAL]
@@ -173,6 +177,13 @@ def run_ui_checks(binary: Path) -> tuple[list[str], list[dict]]:
     def wait_until(predicate, timeout=15.0):
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:
+            # Our hidden clipboard-owner window must service WM_DESTROYCLIPBOARD
+            # while the EXE replaces its contents. Otherwise Tk's idle clipboard
+            # update can wait for this thread while this thread waits for Tk.
+            message = wt.MSG()
+            while user32.PeekMessageW(ct.byref(message), None, 0, 0, 1):
+                user32.TranslateMessage(ct.byref(message))
+                user32.DispatchMessageW(ct.byref(message))
             result = predicate()
             if result:
                 return result
@@ -440,6 +451,8 @@ def run_ui_checks(binary: Path) -> tuple[list[str], list[dict]]:
                             "error": str(error),
                             "process_exit": process.poll(),
                             "windows": windows,
+                            "completed_checks": checks,
+                            "execution_tokens": execution_tokens,
                         }
                         (target / "failure.json").write_text(
                             json.dumps(diagnostic, indent=2), encoding="utf-8"
