@@ -1,11 +1,13 @@
 # Windows build и выпуск MAC Address Converter
 
-Версия документа: 1.0; дата: 05.10.2026; контур: Windows workstation / GitHub Actions;
-статус: draft, native Windows build pending.
+Версия документа: 1.1; дата: 05.10.2026; контур: Windows workstation / GitHub Actions;
+статус: native Windows build и standard-user smoke подтверждены.
 
 Краткий вывод: собрать Windows x64 EXE закреплённым инструментарием, проверить
-сам EXE и только затем выпускать portable-поставку. Сейчас проверены unit-тесты
-в Linux, но сборка и runtime Windows не подтверждены.
+сам EXE и только затем выпускать portable-поставку. В
+[CI](https://github.com/F1ourish/mac-address-converter/actions/runs/37349926876)
+прошли 81 тест и 19 проверок готового EXE. Windows 10/11 acceptance и DPI остаются
+отдельным этапом; GitHub Release не опубликован.
 
 ## Область применения и термины
 
@@ -33,11 +35,12 @@ py -3.12 -c "import sys,struct,tkinter; print(sys.version); print(struct.calcsiz
 script отклоняет другой patch-level; обновление Python требует изменения
 закреплённой версии, конфигурации и нового отчёта проверки.
 
-Подготовить интерактивный desktop, пользовательский каталог с доступом на запись,
+Использовать обычный PowerShell без elevation. Подготовить интерактивный desktop,
+пользовательский каталог с доступом на запись,
 свободное место для venv/build/TEMP и доступ к PyPI для установки dev dependencies.
 Для обычного запуска готового приложения доступ к сети не требуется.
 
-Не публиковать tag `v1.0.0` до успешной Windows-проверки. Если используется
+Для выпуска дополнительно выполнить оставшиеся проверки `TESTING.md`. Если используется
 GitHub runner, убедиться, что он позволяет запуск Tk и Win32 keyboard input;
 отсутствие desktop не следует подменять пропуском проверок.
 
@@ -89,15 +92,26 @@ py -3.12 -m venv .venv
 dist/MacAddressConverter.exe
 dist/SHA256SUMS.txt
 smoke-results/windows-exe.json
+smoke-results/windows-exe.png
 ```
 
 Ожидаемый смысл отчёта: `passed: true`, тот же SHA-256, PE x64 GUI subsystem,
 manifest `asInvoker`, embedded Python/Tcl/Tk, успешные GUI/clipboard операции и reopen.
+В `execution_tokens` оба запуска должны иметь `elevated: false`,
+`administrators_enabled: false`, `integrity_rid: 8192`. DLL runtime должны быть
+загружены из `_MEI...` каталога onefile, а папка приложения содержать только EXE.
 Количество пройденных тестов брать из фактического вывода; примерные числа
 не являются подтверждением результата.
 
 Проверка использует клавиатуру и clipboard. Во время неё не работать в других
 окнах; прежний текстовый clipboard восстанавливается, остальные форматы не гарантируются.
+
+На обычной Windows-машине smoke использует текущего пользователя и отклоняет
+elevated shell. На hosted GitHub runner `scripts/windows_process.py` создаёт
+временную стандартную учётную запись, даёт ей доступ только к тестовой папке
+и desktop, проверяет токен EXE и после теста удаляет учётную запись, восстанавливает
+права desktop и привилегию инспекции у harness. Пароль генерируется в памяти
+и не выводится. Эти операции принадлежат CI-стенду и не включены в EXE.
 
 ## Ручная проверка конечного пользователя
 
@@ -116,12 +130,12 @@ Get-FileHash .\MacAddressConverter.exe -Algorithm SHA256
 
 ## GitHub Actions и выпуск
 
-Workflow подготовлен, но ещё не исполнялся. Он проверяет исходники в Linux,
+Workflow успешно выполнен. Он проверяет исходники в Linux,
 затем в Windows выполняет полный build script. Artifact публикуется только после
 успешного smoke test; автоматического GitHub Release нет.
 Действия закреплены SHA-коммитами официальных репозиториев; права token — `contents: read`.
 
-После первой успешной Windows/standard-user проверки выполнить в локальном git checkout:
+Для будущего выпуска, после оставшейся проверки Windows 10/11, выполнить в локальном git checkout:
 
 ```bash
 git tag v1.0.0
@@ -141,8 +155,8 @@ git push origin v1.0.0
 
 ## Влияние и риски
 
-Источник оценки: код проекта, PyInstaller documentation и эксплуатационный вывод;
-фактическая Windows-проверка ещё не выполнена.
+Источник оценки: код проекта, PyInstaller documentation и фактический
+Windows CI, зафиксированный в `VALIDATION_2026-10-05.md`.
 
 | Область | Практическое влияние |
 | --- | --- |

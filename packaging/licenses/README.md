@@ -11,5 +11,7 @@ https://www.python.org/ftp/python/3.12.10/python-3.12.10-amd64.exe
 Тексты сохранены без изменений. Windows installer Python 3.12.10 содержит
 Tcl 8.6.15 (проверено по `tcl/tcl8.6/init.tcl`). Tcl notice в его MSI отсутствует,
 поэтому для Tcl `.spec` использует сохранённый исходный текст.
-Python/Tk notices и PyInstaller COPYING берутся из фактической builder-установки;
-это не проверка наличия notices внутри готового EXE — он ещё не собран.
+Python/Tk notices и PyInstaller COPYING берутся из фактической builder-установки.
+Наличие всех notices в Windows EXE подтверждено 05.10.2026 при успешном CI smoke
+и независимой инспекции PyInstaller archive. Текст MIT приложения и Tcl notice
+также совпал с исходниками после нормализации Windows CRLF.

@@ -11,9 +11,10 @@ CPython, Tcl/Tk и PyInstaller bootloader. Их лицензии не замен
 3. Сохранить уведомления PyInstaller bootloader из закреплённой версии инструмента.
 4. Проверить, что оригинальные notices входят в EXE либо приложены к release.
 
-Сейчас Windows build не выполнен, поэтому наличие всех notices внутри
-реального Windows artifact ещё не подтверждено. Предусмотрено включение notices
-в `.spec`; build должен завершиться ошибкой, если исходные notices не найдены.
+В проверенной Windows-сборке 05.10.2026 наличие MIT приложения, Python,
+Tcl, Tk и PyInstaller notices внутри реального EXE подтверждено smoke test
+и инспекцией архива. `.spec` завершает build ошибкой, если исходные notices
+не найдены. При обновлении runtime проверку необходимо повторить.
 
 Официальные источники:
 [CPython license](https://docs.python.org/3/license.html),

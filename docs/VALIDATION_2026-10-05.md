@@ -1,25 +1,24 @@
 # Отчёт проверки MAC Address Converter 1.0.0
 
-Дата: 05.10.2026. Статус: **исходники подготовлены; Windows-поставка не завершена**.
+Дата: 05.10.2026. Статус: **Windows x64 EXE собран, фактически запущен и проверен**.
 
-Краткий вывод: MAC-модуль, CLI, исходный GUI, тесты, документация и CI созданы.
-Локально подтверждены **69 passed, 12 skipped** и проверки Ruff.
-Windows `MacAddressConverter.exe` **не создан и не запускался**. Definition of Done
-из ТЗ не достигнут; этот архив нельзя выдавать за готовую portable-утилиту.
+В [GitHub Actions](https://github.com/F1ourish/mac-address-converter/actions/runs/37349926876) успешно прошли **81 pytest-тест и 19 проверок
+готового EXE**. Приложение запускалось дважды от настоящей стандартной учётной
+записи Windows, без elevation. Проверены live conversion, четыре формата,
+UPPERCASE, clipboard, ошибка ввода и повторный запуск. Готовый binary предоставлен.
+Windows 10/11, полностью чистая машина без Python и разные DPI отдельно не проверены.
 
 ## Реализовано
 
 - Независимый `mac.py`: normalization, ровно 12 ASCII hex, lowercase representation.
 - Cisco, Colon (default), Hyphen, Plain; uppercase/lowercase.
 - Tkinter GUI с live conversion, readonly Result, Copy и статусом.
-- Очистка stale result и disabled Copy при некорректном MAC.
-- Стандартные Ctrl+C/V, Ctrl+A для Input/Result, Ctrl+L для Input.
-- CLI из исходников поверх того же API; portable CLI EXE не добавлен.
+- Очистка результата и disabled Copy при некорректном MAC.
+- Стандартные Ctrl+C/V/A; Ctrl+L для Input.
+- CLI из исходников поверх того же API; отдельный portable CLI EXE не поставляется.
 - Runtime без внешних пакетов, сети, телеметрии, истории и persistent settings.
-- Onefile/windowed `.spec`, Windows manifest `asInvoker`, единый `__version__`.
-- Закреплённые dev dependencies; GitHub Actions; инструкции build/test/release.
-
-Под «реализовано GUI» подразумевается написанный код, не успешная runtime-проверка.
+- Onefile/windowed EXE, manifest `asInvoker`, единый `__version__`, MIT.
+- Закреплённые dev dependencies, CI и инструкции build/test/release.
 
 ## Структура проекта
 
@@ -41,6 +40,7 @@ mac-address-converter/
   scripts/
     build_windows.py
     smoke_windows.py
+    windows_process.py
     check_release_tag.py
   packaging/
     gui_entry.py
@@ -52,6 +52,7 @@ mac-address-converter/
     BUILD_AND_RELEASE.md
     TESTING.md
     VALIDATION_2026-10-05.md
+    screenshot.png
   mac-converter.spec
   pyproject.toml
   requirements-dev.txt
@@ -62,122 +63,115 @@ mac-address-converter/
   .gitignore
 ```
 
-## Фактические проверки
+Исходники: [F1ourish/mac-address-converter](https://github.com/F1ourish/mac-address-converter).
+Проверенный commit: `f3fb8e3efb8d2c3290fc8b1d76eb648db460ef42`.
+Обновление документации после него не меняет код проверенного приложения.
 
-Среда: Ubuntu 24.04.3 x64; CPython 3.12.14; pytest 8.4.2;
-Ruff 0.13.3. Tk 9.0 доступен как модуль, рабочего GUI connection нет.
+## Фактические тесты и среда
 
-Из корня репозитория выполнялось:
+| Проверка | Полученный результат |
+| --- | --- |
+| Windows `pytest -q --require-gui` | `81 passed in 2.90s`, GUI не пропущен |
+| Linux CI: логика, CLI, release-tag tests | 69 passed |
+| Локальные логика/CLI/release tests | `69 passed in 0.05s` |
+| Ruff lint и format | Passed в Linux CI и локально |
+| PyInstaller | Build completed successfully |
+| Фактический Windows EXE | `EXE smoke: 19 checks passed` |
 
-```bash
-python -m pytest -q
-```
-
-Фактический вывод:
-
-```text
-69 passed, 12 skipped in 0.25s
-```
-
-GUI checks пропущены из-за отсутствия доступного Tk-дисплея. Отдельные попытки
-`--require-gui` корректно дали ошибки setup: подключение к виртуальному
-дисплею запрещено/недоступно. Эти ошибки не являются успешной GUI-проверкой
-и не показывают функциональный результат работы интерфейса.
-
-Выполнялись:
-
-```bash
-python -m ruff check src tests scripts packaging/gui_entry.py
-python -m ruff format --check src tests scripts packaging/gui_entry.py
-```
-
-Подтверждено: lint и format checks прошли. Все Python-файлы и `.spec`
-разобраны AST-парсером. Workflow YAML проверен структурно; выполнение GitHub
-Actions не проверялось.
-
-Пакет установлен из исходников без build isolation; metadata сообщает версию
-1.0.0. CLI фактически выполнен:
-
-```bash
-python -m mac_converter.cli 0011.2233.aabb --format colon
-python -m mac_converter.cli aabb.ccdd.eeff --format hyphen --upper
-python -m mac_converter.cli --version
-```
-
-Фактические результаты по порядку:
-
-```text
-00:11:22:33:aa:bb
-AA-BB-CC-DD-EE-FF
-MAC Address Converter 1.0.0
-```
-
-Dependencies дополнительно разрешены для Windows x64 / Python 3.12 с помощью
-`uv pip compile`: 13 пакетов, конфликтов не получено. Это проверка совместимости
-заявленных зависимостей, а не установка или сборка в Windows.
+Windows: Microsoft Windows Server 2025, build 10.0.26100.
+Runner image: `windows-2025-vs2026`, версия `20260925.250.1`.
+Builder: CPython 3.12.10 x64, PyInstaller 6.22.3, pytest 8.4.2, Ruff 0.13.3.
+Локальная среда проверок логики: Ubuntu x64, CPython 3.12.14.
 
 ## Build configuration и artifact
 
-Точная подготовленная команда:
+Фактически использована команда:
 
 ```powershell
-.\.venv\Scripts\python.exe -m PyInstaller --clean --noconfirm mac-converter.spec
+python -m PyInstaller --clean --noconfirm mac-converter.spec
 ```
 
-Полная процедура с обязательными тестами и smoke:
+Полная процедура, запущенная в Windows CI:
 
 ```powershell
-.\.venv\Scripts\python.exe scripts/build_windows.py
+python scripts/build_windows.py
 ```
 
-Настройки: Windows CPython 3.12.10 x64, PyInstaller 6.22.3, onefile,
-`console=False`, UPX disabled, version resource, manifest `asInvoker`.
-Ожидаемый artifact: `dist/MacAddressConverter.exe`.
-**Фактический artifact отсутствует.** Контрольная сумма Windows EXE отсутствует.
+Настройки: onefile, `console=False`, без UPX, version resource 1.0.0.0,
+manifest `asInvoker`, bundled Python/Tcl/Tk и лицензии.
 
-Build script в Linux фактически запущен и отказал с понятным требованием
-использовать Windows Python. Linux executable не создавался и не переименовывался в `.exe`.
+- Файл: `dist/MacAddressConverter.exe`.
+- Размер: **11,338,545 байт**.
+- SHA-256 EXE: `b3361751cb446e50a352ebfe9de91a30ed9f2b47f4dae088c65531b12287993a`.
+- [Проверенный artifact](https://github.com/F1ourish/mac-address-converter/actions/runs/37349926876/artifacts/11362132391), ID `11362132391`.
+- Artifact CI ZIP SHA-256: `b8014e8d624da079de95dc668513303c283eacd8f138c871933e511c780b7f27`.
+- Создан 05.10.2026, срок хранения CI artifact — до 04.11.2026.
 
-## Почему EXE не удалось проверить
+Artifact содержит EXE, SHA256SUMS, `windows-exe.json` и настоящий PNG рабочего EXE.
+Скачанный ZIP проверен по digest GitHub и CRC; SHA-256 EXE совпал с SHA256SUMS
+и JSON-отчётом. Независимо проверены PE x64, GUI subsystem и 999 entries
+PyInstaller archive, включая Python/Tcl/Tk и все обязательные license notices.
+Тексты MIT и Tcl notice совпали с исходниками после нормализации Windows CRLF.
+Внутренний CI ZIP и пользовательский portable ZIP имеют разные упаковку и digest;
+EXE в них один и тот же.
 
-Попытка использовать Windows Python через Wine заблокирована средой исполнения:
+Процедура сборки повторяема по шагам и закреплённым версиям;
+побайтовая идентичность независимых сборок не заявляется.
 
-```text
-wineserver: socket: Operation not permitted
+## Фактический запуск EXE
+
+Временная папка приложения содержала только EXE; путь включал пробелы и кириллицу.
+`PATH` ограничен Windows System32, переменные Python/Tcl/venv убраны.
+TEMP и пользовательские каталоги изолированы. Приложение работало без исходников,
+venv, IDE или доступа к установленному builder interpreter.
+
+У обоих процессов GUI Windows token подтвердил:
+
+```json
+{
+  "elevated": false,
+  "administrators_enabled": false,
+  "integrity_rid": 8192,
+  "restricted": false
+}
 ```
 
-Попытка подключить Tk к виртуальному X-дисплею также не удалась:
+Это запуск от обычной учётной записи, а не обход проверки elevation.
+Загруженные `python312.dll`, `_tkinter.pyd`, `tcl86t.dll`, `tk86t.dll` находились
+в `_MEI...` папке распакованного onefile runtime. Зависимость от внешнего Python
+не обнаружена в этом сценарии. Сам CI builder имеет установленный Python;
+тест на физически чистой Windows-машине отдельно не проводился.
 
-```text
-couldn't connect to display "127.0.0.1:98"
-```
-
-Нет доступа к действующей нативной Windows-машине или подключённому Windows CI.
-GitHub workflow пока не запускался, репозиторий в GitHub не создавался.
-
-## Definition of Done
-
-| Требование | Статус |
+| Проверка реального EXE | Факт |
 | --- | --- |
-| MAC normalization, validation, четыре output formats, case | Подтверждено unit-тестами |
-| GUI, live conversion, Copy, keyboard shortcuts | Код и тесты написаны; runtime не проверен |
-| CLI и единая business logic | Подтверждено тестами и запуском CLI |
-| pytest | 69 passed; 12 GUI skipped |
-| README, docs, CI, build config, LICENSE | Созданы; CI статически проверен |
-| Windows PyInstaller build | Не выполнен |
-| `MacAddressConverter.exe` | Не создан |
-| Фактический EXE smoke test | Не выполнен |
-| Без Python / без admin privileges | Требует Windows acceptance test |
-| Windows DPI и реальный screenshot | Требует Windows acceptance test |
-| Готовый GitHub Release | Не создавался |
+| PE x64 / GUI subsystem / version / manifest | Passed |
+| Запуск без elevation, обычная учётная запись | Passed, оба запуска |
+| Встроенный runtime и notices | Passed, наличие в archive и загрузка DLL |
+| Ctrl+L/V/A/C и live Colon conversion | Passed |
+| Cisco, Colon, Hyphen, Plain | Passed |
+| UPPERCASE в Colon и Cisco | Passed |
+| Copy | Clipboard содержит только форматированный результат |
+| Некорректный MAC | Result очищен, GUI работает и принимает следующий MAC |
+| Закрытие и повторное открытие | Exit code 0, Colon/lowercase восстановлены |
+| Portable folder | После проверки по-прежнему только EXE |
+| Скриншот | Снят с фактически запущенного EXE и добавлен в README |
+
+Статусы Ready/Copied, disabled Copy, readonly Result, сбой clipboard и обработка
+неожиданной ошибки дополнительно подтверждены 12 тестами исходного Tk GUI.
+Скрипты инспекции/создания временной CI-учётной записи не входят в приложение.
+
+## Ограничения и оставшаяся проверка
+
+- Windows 10/11 x64 — целевая среда; непосредственно проверен Windows Server 2025.
+- Не проведён тест на чистой Windows 10/11 без установленного Python.
+- Не проверены масштабы 100%, 125%, 150%, локали и клиентские Windows themes.
+- Поведение Defender, SmartScreen и корпоративных политик не проверено; code signing нет.
+- GitHub Release и tag `v1.0.0` пока не опубликованы.
+- Bulk/OUI lookup, installer, updater, история и portable CLI вне v1.0.
 
 ## Следующие действия
 
-1. Выполнить `scripts/build_windows.py` на Windows CPython 3.12.10 x64
-   либо запустить подготовленный GitHub workflow в разрешённом репозитории.
-2. Проверить EXE без Python под стандартным Windows user по `TESTING.md`;
-   записать SHA-256, реальные результаты и screenshot.
-3. Только после этого создать `v1.0.0` и проверенный release artifact.
-
-Документы `BUILD_AND_RELEASE.md` и `TESTING.md` содержат точные команды,
-ожидаемое поведение, rollback и условия завершения проверки.
+1. Выполнить оставшиеся проверки на Windows 10/11 без Python и при разных DPI
+   по [TESTING.md](https://github.com/F1ourish/mac-address-converter/blob/main/docs/TESTING.md).
+2. После проверки подготовить тег `v1.0.0` и draft Release с проверенным EXE и SHA-256
+   по [runbook](https://github.com/F1ourish/mac-address-converter/blob/main/docs/BUILD_AND_RELEASE.md).

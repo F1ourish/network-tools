@@ -6,4 +6,6 @@
 - Live Tkinter GUI, readonly result, Copy, keyboard shortcuts.
 - Shared parsing API and optional source CLI.
 - Validation, unit/GUI tests, pinned PyInstaller configuration, Windows CI.
-- Pending: native Windows build and actual portable EXE acceptance.
+- Native Windows build verified: 81 tests and 19 actual-EXE smoke checks passed.
+- Standard-account launch, embedded runtime loading, clipboard and restart verified.
+- Remaining acceptance: clean Windows 10/11 clients and DPI variants; no GitHub Release published.

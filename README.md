@@ -4,11 +4,12 @@
 между Cisco, Colon, Hyphen и Plain. Формат ввода определяется автоматически;
 формат вывода по умолчанию — Colon, lowercase.
 
-**Статус на 05.10.2026:** подготовлены исходники, тесты и Windows build workflow.
-Готовый Windows EXE пока не собран и не проверен: текущая среда Linux запрещает
-служебный сокет Wine и подключение к тестовому дисплею. Это кандидат версии 1.0.0,
-который нельзя считать завершённой portable-поставкой. Подробности и фактические
-результаты — в [отчёте проверки](docs/VALIDATION_2026-10-05.md).
+**Версия 1.0.0, проверено 05.10.2026:** Windows x64 EXE собран и фактически
+запущен в [успешном CI](https://github.com/F1ourish/mac-address-converter/actions/runs/37349926876):
+**81 pytest-тест и 19 проверок готового EXE прошли**. Запуск от обычной учётной
+записи без повышения прав и загрузка встроенного Python/Tcl/Tk подтверждены.
+Проверенная среда — Windows Server 2025; Windows 10/11 и разные DPI ещё требуют
+отдельной проверки. Подробности — в [отчёте](docs/VALIDATION_2026-10-05.md).
 
 ## Возможности
 
@@ -19,7 +20,7 @@
 - Ctrl+C, Ctrl+V, Ctrl+A; Ctrl+L выделяет Input.
 - GUI отделён от бизнес-логики; CLI использует тот же модуль.
 - Нет внешних runtime-зависимостей, сети, телеметрии, истории и настроек.
-- Подготовлена onefile/windowed сборка `MacAddressConverter.exe` с `asInvoker`.
+- Onefile/windowed сборка `MacAddressConverter.exe` с `asInvoker`.
 
 ## Примеры
 
@@ -39,18 +40,21 @@
 
 ## Скриншот
 
-Скриншота проверенного EXE пока нет. После Windows smoke test следует добавить
-реальный `docs/screenshot.png`. Иллюстрация интерфейса не подменяет проверку EXE.
+![MAC Address Converter 1.0.0](docs/screenshot.png)
+
+Скриншот реально запущенного EXE на Windows Server 2025 в CI.
 
 ## Запуск готовой версии
 
-После успешной Windows-проверки скачать `MacAddressConverter.exe` из Releases
-или проверенного artifact в Actions и запустить двойным кликом.
-Не требуется установка Python или installer. Манифест не запрашивает повышение
-прав; фактический запуск под стандартным пользователем необходимо подтвердить
-по [чеклисту](docs/TESTING.md).
+Скачать и распаковать
+[проверенный Windows artifact](https://github.com/F1ourish/mac-address-converter/actions/runs/37349926876/artifacts/11362132391).
+Запустить `dist/MacAddressConverter.exe` двойным кликом. Можно скопировать только
+этот EXE в пользовательский каталог; installer и установка Python не нужны.
+Манифест `asInvoker` и фактический токен процесса подтверждают запуск без elevation.
+Artifact доступен владельцу приватного репозитория и хранится до 04.11.2026.
 
-Пока этот репозиторий не опубликован и проверенный Releases artifact не создан.
+GitHub Release пока не опубликован. Целевая среда — Windows 10/11 x64;
+результаты и оставшиеся проверки перечислены в [чеклисте](docs/TESTING.md).
 
 ## Запуск из исходников
 
@@ -112,7 +116,10 @@ python -m pytest -q tests/test_mac.py tests/test_cli.py tests/test_release.py
 
 После сборки создаёт `dist/SHA256SUMS.txt` и проверяет **собранный EXE** отдельным
 Win32 harness. Успешный результат — EXE и успешный `smoke-results/windows-exe.json`.
-Сам успешный PyInstaller build не означает успешную поставку.
+Также сохраняется настоящий `smoke-results/windows-exe.png`.
+Локальную сборку запускать из обычного PowerShell без elevation: smoke проверяет
+реальные права процесса. В hosted CI для этого временно создаётся обычная
+учётная запись; эта инфраструктура не входит в приложение.
 
 `.spec` намеренно сохранён в репозитории: onefile, `console=False`, без UPX,
 встроенный манифест `asInvoker`, version resource из `__version__`.
@@ -125,7 +132,7 @@ GitHub Actions запускается на push, pull_request, тегах `v*` �
 Linux job проверяет код и логику. Windows job выполняет GUI-тесты,
 PyInstaller, smoke test EXE и upload artifact. Smoke test требует рабочего
 Windows desktop; при его отсутствии pipeline должен завершиться ошибкой.
-Workflow подготовлен и проверен статически, фактически в GitHub ещё не запускался.
+Workflow фактически выполнен: [проверенный запуск](https://github.com/F1ourish/mac-address-converter/actions/runs/37349926876).
 
 Тег релиза должен совпадать с версией кода (`v1.0.0` для текущей версии).
 Автоматическая публикация GitHub Release на push не настроена.

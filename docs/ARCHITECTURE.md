@@ -1,6 +1,6 @@
 # Архитектура MAC Address Converter
 
-Версия документа: 1.0; дата: 05.10.2026; статус: draft, Windows runtime verification pending.
+Версия документа: 1.1; дата: 05.10.2026; статус: Windows runtime проверен в CI.
 
 Краткий вывод: приложение использует один независимый MAC-модуль; GUI и CLI
 не содержат собственных правил parsing. Runtime — стандартная библиотека Python и Tcl/Tk.
@@ -27,6 +27,7 @@
 | `__init__.py` | Единственный источник версии для package metadata и Windows resources |
 | `.spec`, `windows.manifest` | Onefile/windowed сборка и `asInvoker` |
 | `scripts/smoke_windows.py` | Внешний тест EXE; не включается в product runtime |
+| `scripts/windows_process.py` | Запуск без elevation и инспекция токена/DLL для тестового стенда; не входит в EXE |
 
 ## Данные и зависимости
 
@@ -37,7 +38,9 @@
 PyInstaller onefile распаковывает bundled runtime во временную пользовательскую
 директорию. Это служебные Python/Tcl/Tk файлы, не история MAC. Внешний установленный
 Python не должен использоваться, что проверяется smoke harness в новой папке
-с очищенным Python/Tcl environment и PATH из Windows System32.
+с очищенным Python/Tcl environment и PATH из Windows System32. Фактически
+подтверждена загрузка `python312.dll`, `_tkinter.pyd`, `tcl86t.dll`, `tk86t.dll`
+из onefile-каталога `_MEI...`, а не из builder Python.
 
 ## Обработка ошибок
 
@@ -51,8 +54,9 @@ Unexpected callback exception очищает результат, отключа�
 Нет bulk conversion, persistent settings, OUI lookup, installer, updater,
 сканирования сети, внешнего backend и portable CLI executable.
 Поддержка Windows 10/11 x64 является целевой, а не уже подтверждённой.
-Работа при разных DPI и под стандартным Windows user требует выполнения
-проверок в `TESTING.md`. Windows API test harness также пока не запускался.
+Standard-user запуск EXE на Windows Server 2025 подтверждён. Windows 10/11,
+машина без установленного Python и разные DPI требуют оставшихся проверок
+в `TESTING.md`; их нельзя выводить из успешного server CI.
 
 ## Проверенные официальные источники
 
