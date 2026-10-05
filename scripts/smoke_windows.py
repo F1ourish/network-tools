@@ -64,7 +64,14 @@ def verify_binary(binary: Path) -> list[str]:
     return checks
 
 
-def run_ui_checks(binary: Path) -> list[str]:
+def run_ui_checks(binary: Path) -> tuple[list[str], list[dict]]:
+    from windows_process import (
+        LimitedProcess,
+        assert_unprivileged,
+        launch_unprivileged,
+        process_security,
+    )
+
     user32 = ct.WinDLL("user32", use_last_error=True)
     kernel32 = ct.WinDLL("kernel32", use_last_error=True)
 
@@ -255,6 +262,7 @@ def run_ui_checks(binary: Path) -> list[str]:
         return matches[0] if matches else None
 
     checks = []
+    execution_tokens = []
     previous_text = read_clipboard()
     environment = os.environ.copy()
     for key in ("PYTHONPATH", "PYTHONHOME", "TCL_LIBRARY", "TK_LIBRARY", "VIRTUAL_ENV"):
@@ -265,15 +273,23 @@ def run_ui_checks(binary: Path) -> list[str]:
             isolated = Path(temporary) / binary.name
             shutil.copy2(binary, isolated)
             for launch in range(2):
-                process = subprocess.Popen([str(isolated)], cwd=temporary, env=environment)
+                process = launch_unprivileged(isolated, temporary, environment)
                 hwnd = None
                 try:
                     hwnd = wait_until(lambda: find_window(isolated.resolve()), timeout=30)
                     user32.ShowWindow(hwnd, 9)
                     user32.SetForegroundWindow(hwnd)
                     wait_until(lambda: user32.GetForegroundWindow() == hwnd)
+                    pid = wt.DWORD()
+                    user32.GetWindowThreadProcessId(hwnd, ct.byref(pid))
+                    security = process_security(pid.value)
+                    assert_unprivileged(security)
+                    execution_tokens.append(security)
                     checks.append(
                         f"Launch {launch + 1}: GUI in isolated folder with spaces/Unicode"
+                    )
+                    checks.append(
+                        f"Launch {launch + 1}: non-elevated, no enabled admin SID, medium integrity"
                     )
                     if launch == 1:
                         paste("AABB.CCDD.EEFF")
@@ -322,13 +338,17 @@ def run_ui_checks(binary: Path) -> list[str]:
                     except subprocess.TimeoutExpired:
                         process.kill()
                         process.wait(timeout=5)
-                    assert process.returncode == 0, f"EXE exited with {process.returncode}"
+                    try:
+                        assert process.returncode == 0, f"EXE exited with {process.returncode}"
+                    finally:
+                        if isinstance(process, LimitedProcess):
+                            process.close()
             checks.append("Close and restart: exit code 0")
     finally:
         if previous_text is not None:
             write_clipboard(previous_text)
         user32.DestroyWindow(owner)
-    return checks
+    return checks, execution_tokens
 
 
 def main() -> int:
@@ -339,14 +359,16 @@ def main() -> int:
         parser.error("Run this harness with Windows Python on an interactive desktop")
     binary = args.binary.resolve()
     checks = verify_binary(binary)
-    checks.extend(run_ui_checks(binary))
+    ui_checks, execution_tokens = run_ui_checks(binary)
+    checks.extend(ui_checks)
     report = {
         "binary": binary.name,
         "sha256": hashlib.sha256(binary.read_bytes()).hexdigest(),
         "passed": True,
         "environment": {"python": sys.version, "platform": sys.platform},
         "checks": checks,
-        "limit": "This harness does not prove standard-user UAC, Defender or SmartScreen behavior.",
+        "execution_tokens": execution_tokens,
+        "limit": "Tested on a Windows runner using a non-elevated medium token; clean Windows client, Defender and SmartScreen behavior are not covered.",
     }
     target = Path("smoke-results")
     target.mkdir(exist_ok=True)
