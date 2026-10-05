@@ -7,11 +7,9 @@ def pytest_addoption(parser):
     )
 
 
-@pytest.fixture
-def app(request):
+@pytest.fixture(scope="session")
+def tk_runtime(request):
     import tkinter as tk
-
-    from mac_converter.gui import MacConverterApp
 
     try:
         root = tk.Tk()
@@ -19,7 +17,22 @@ def app(request):
         if request.config.getoption("--require-gui"):
             pytest.fail(f"A Tk desktop is required: {error}")
         pytest.skip("No Tk desktop; use Windows or Xvfb to run GUI checks")
+    root.withdraw()
+    yield root
+    root.destroy()
+
+
+@pytest.fixture
+def app(tk_runtime):
+    import tkinter as tk
+
+    from mac_converter.gui import MacConverterApp
+
+    # Keep one Tcl/Tk interpreter; each test still gets a fresh application window.
+    root = tk.Toplevel(tk_runtime)
     instance = MacConverterApp(root)
     root.update()
-    yield instance
-    root.destroy()
+    try:
+        yield instance
+    finally:
+        root.destroy()
