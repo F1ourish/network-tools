@@ -289,9 +289,7 @@ def run_ui_checks(binary: Path) -> tuple[list[str], list[dict]]:
         def visit(hwnd, _parameter):
             title = ct.create_unicode_buffer(256)
             user32.GetWindowTextW(hwnd, title, len(title))
-            if not title.value.startswith(title_prefix) or not user32.IsWindowVisible(
-                hwnd
-            ):
+            if not title.value.startswith(title_prefix) or not user32.IsWindowVisible(hwnd):
                 return True
             pid = wt.DWORD()
             user32.GetWindowThreadProcessId(hwnd, ct.byref(pid))
@@ -418,7 +416,11 @@ def run_ui_checks(binary: Path) -> tuple[list[str], list[dict]]:
                         security = process_security(pid.value)
                         assert_unprivileged(security)
                         security["runtime_dlls"] = process_runtime(pid.value)
-                        security["display"] = {"width": user32.GetSystemMetrics(0), "height": user32.GetSystemMetrics(1), "window_dpi": user32.GetDpiForWindow(hwnd)}
+                        security["display"] = {
+                            "width": user32.GetSystemMetrics(0),
+                            "height": user32.GetSystemMetrics(1),
+                            "window_dpi": user32.GetDpiForWindow(hwnd),
+                        }
                         execution_tokens.append(security)
                         checks.append(
                             f"Launch {launch + 1}: GUI in isolated folder with spaces/Unicode"
@@ -505,7 +507,11 @@ def run_ui_checks(binary: Path) -> tuple[list[str], list[dict]]:
                         write_clipboard("host page sentinel")
                         keys(0x11, ord("A"))
                         keys(0x11, ord("C"))
-                        wait_until(lambda: (text := read_clipboard()) and len(text.splitlines()) == 100 and text.splitlines()[0] == "192.168.1.1")
+                        wait_until(
+                            lambda: (text := read_clipboard())
+                            and len(text.splitlines()) == 100
+                            and text.splitlines()[0] == "192.168.1.1"
+                        )
                         keys(0x09)  # First page: disabled Previous is skipped, focus Next.
                         keys(0x20)
                         keys(0x10, 0x09)  # Previous is now enabled.
@@ -513,7 +519,10 @@ def run_ui_checks(binary: Path) -> tuple[list[str], list[dict]]:
                         write_clipboard("host second-page sentinel")
                         keys(0x11, ord("A"))
                         keys(0x11, ord("C"))
-                        wait_until(lambda: (text := read_clipboard()) and text.splitlines()[0] == "192.168.1.101")
+                        wait_until(
+                            lambda: (text := read_clipboard())
+                            and text.splitlines()[0] == "192.168.1.101"
+                        )
                         for _ in range(3):
                             keys(0x09)  # Previous, Next, page number.
                         keys(0x11, ord("A"))
@@ -524,12 +533,18 @@ def run_ui_checks(binary: Path) -> tuple[list[str], list[dict]]:
                         keys(0x09)
                         write_clipboard("host last-page sentinel")
                         keys(0x20)  # Copy current page button.
-                        wait_until(lambda: (text := read_clipboard()) and len(text.splitlines()) == 54 and text.splitlines()[-1] == "192.168.1.254")
+                        wait_until(
+                            lambda: (text := read_clipboard())
+                            and len(text.splitlines()) == 54
+                            and text.splitlines()[-1] == "192.168.1.254"
+                        )
                         save_screenshot(host_hwnd, Path("smoke-results/hosts-day.png"))
                         user32.PostMessageW(host_hwnd, 0x0010, 0, 0)
                         user32.SetForegroundWindow(hwnd)
                         wait_until(lambda: user32.GetForegroundWindow() == hwnd)
-                        checks.append("Host dialog: first/second/last page, jump and page copy through the EXE")
+                        checks.append(
+                            "Host dialog: first/second/last page, jump and page copy through the EXE"
+                        )
                         paste("10.20.30.40/16")
                         copy_tool("Подсеть CIDR: 10.20.0.0/16", "Первый хост: 10.20.0.1")
                         paste_control(1, "255.0.255.0")
