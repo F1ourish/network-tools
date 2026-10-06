@@ -249,3 +249,12 @@ def test_range_is_full_width_readonly_and_copyable(app):
     entry.insert(0, "incorrect")
     app.ipv4_range_table.buttons["Диапазон хостов"].invoke()
     assert app.root.clipboard_get() == "192.168.1.1 – 192.168.1.254"
+
+
+def test_readonly_host_list_remains_reachable_with_tab(app):
+    app.show_hosts()
+    app.root.update()
+    assert app.host_text.tk_focusNext() == app.host_next_button
+    app._host_move(1)
+    assert app.host_prev_button.tk_focusPrev() == app.host_text
+    assert app.host_text.cget("state") == "disabled"

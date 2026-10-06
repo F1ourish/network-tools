@@ -355,7 +355,9 @@ class MacConverterApp:
         container = ttk.Frame(parent)
         container.columnconfigure(0, weight=1)
         container.rowconfigure(0, weight=1)
-        text = tk.Text(container, height=height, width=50, wrap="word", font=self.fixed_font)
+        text = tk.Text(
+            container, height=height, width=50, wrap="word", font=self.fixed_font, takefocus=True
+        )
         text.grid(row=0, column=0, sticky="nsew")
         scrollbar = ttk.Scrollbar(container, orient="vertical", command=text.yview)
         scrollbar.grid(row=0, column=1, sticky="ns")
