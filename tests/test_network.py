@@ -193,6 +193,7 @@ def test_route_no_match_and_host_route():
         "0.0.0.0/0\ninvalid",
         "0.0.0.0/0\n" * 10001,
     ],
+    ids=["empty", "comments", "host-bits", "missing-prefix", "ipv6", "bad-line", "too-many-routes"],
 )
 def test_invalid_route_input(routes):
     with pytest.raises(InvalidNetworkInput):
