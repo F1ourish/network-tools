@@ -9,6 +9,7 @@ import platform
 import struct
 import subprocess
 import sys
+import xml.etree.ElementTree as ET
 import zipfile
 
 
@@ -48,6 +49,14 @@ def main() -> int:
 
     report = json.loads((results / "windows-exe.json").read_text(encoding="utf-8"))
     assert report["passed"] is True
+    suites = ET.parse(results / "pytest.xml").getroot().findall("testsuite")
+    test_counts = {
+        key: sum(int(suite.attrib.get(key, 0)) for suite in suites)
+        for key in ("tests", "failures", "errors", "skipped")
+    }
+    assert test_counts["tests"] > 0 and not any(
+        test_counts[key] for key in ("failures", "errors", "skipped")
+    )
     metadata = {
         "version": __version__,
         "commit": os.environ.get("GITHUB_SHA"),
@@ -56,6 +65,7 @@ def main() -> int:
         "runner_image": os.environ.get("ImageVersion"),
         "python": sys.version,
         "dependencies": {name: version(name) for name in ("ttkbootstrap", "Pillow", "pyinstaller")},
+        "pytest": test_counts,
         "smoke": report,
     }
     verification = binary.parent / "RELEASE_VERIFICATION.json"

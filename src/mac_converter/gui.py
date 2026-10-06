@@ -174,7 +174,7 @@ class MacConverterApp:
         width = max(820, min(940, root.winfo_screenwidth() - 80))
         height = max(610, min(760, root.winfo_screenheight() - 90))
         x = max(0, (root.winfo_screenwidth() - width) // 2)
-        y = max(0, (root.winfo_screenheight() - height) // 2 - 20)
+        y = max(0, (root.winfo_screenheight() - height - 90) // 2)
         root.geometry(f"{width}x{height}+{x}+{y}")
         root.after_idle(self.input_entry.focus_set)
 
@@ -772,6 +772,8 @@ class MacConverterApp:
         return "break"
 
     def _show_focused_field(self, event):
+        if not isinstance(event.widget, tk.Misc):
+            return
         index = self.notebook.index(self.notebook.select())
         page, canvas = self.pages[index], self._canvases[index]
         if not str(event.widget).startswith(str(page) + "."):

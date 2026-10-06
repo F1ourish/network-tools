@@ -237,9 +237,15 @@ def run_ui_checks(binary: Path) -> tuple[list[str], list[dict]]:
             user32.CloseClipboard()
 
     def keys(*virtual_keys):
-        events = [Input(type=1, data=InputUnion(ki=KeyboardInput(wVk=key))) for key in virtual_keys]
+        extended = {0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27, 0x28, 0x2D, 0x2E}
+        events = [
+            Input(type=1, data=InputUnion(ki=KeyboardInput(wVk=key, dwFlags=int(key in extended))))
+            for key in virtual_keys
+        ]
         events += [
-            Input(type=1, data=InputUnion(ki=KeyboardInput(wVk=key, dwFlags=2)))
+            Input(
+                type=1, data=InputUnion(ki=KeyboardInput(wVk=key, dwFlags=2 | int(key in extended)))
+            )
             for key in reversed(virtual_keys)
         ]
         inputs = (Input * len(events))(*events)
@@ -268,7 +274,9 @@ def run_ui_checks(binary: Path) -> tuple[list[str], list[dict]]:
         write_clipboard("tool copy sentinel")
         keys(0x11, 0x10, ord("C"))
         return wait_until(
-            lambda: (value := read_clipboard()) and all(fragment in value for fragment in fragments)
+            lambda: value
+            if (value := read_clipboard()) and all(fragment in value for fragment in fragments)
+            else None
         )
 
     def paste_control(tab_count, value):
@@ -632,6 +640,7 @@ def run_ui_checks(binary: Path) -> tuple[list[str], list[dict]]:
                             "error": str(error),
                             "process_exit": process.poll(),
                             "windows": windows,
+                            "clipboard": read_clipboard(),
                             "completed_checks": checks,
                             "execution_tokens": execution_tokens,
                         }
