@@ -588,7 +588,7 @@ def run_ui_checks(binary: Path) -> tuple[list[str], list[dict]]:
                         copy_tool("TCP MSS: 1452")
                         focus_control(2)
                         keys(0x28)
-                        keys(0x23)  # Open list, then End selects IPv6.
+                        keys(0x28)  # First Down opens the list; second Down selects IPv6.
                         keys(0x0D)
                         copy_tool("TCP MSS: 1432", "Фиксированный IP-заголовок: 40")
                         paste_control(1, "60")
