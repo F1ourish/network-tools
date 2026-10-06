@@ -39,7 +39,7 @@ Win32 smoke запускает EXE в новой папке с пробелам�
 | --- | --- |
 | dist/MacAddressConverter.exe | Standalone GUI x64 |
 | dist/NetworkTools-1.1.0-windows-x64.zip | EXE, инструкция, notices и verification report |
-| dist/RELEASE_VERIFICATION.json | Version, source commit, runner, dependencies, actual smoke checks |
+| dist/RELEASE_VERIFICATION.json | Version, source commit, runner, dependencies, pytest summary, actual smoke checks |
 | dist/SHA256SUMS.txt | SHA-256 EXE, ZIP и verification JSON |
 | smoke-results/pytest.xml | Фактические результаты pytest |
 | smoke-results/*.png | Скриншоты реально запущенного EXE |
@@ -69,6 +69,19 @@ Linux проверяет Ruff и все non-GUI tests. Windows обязател�
 изменения. Commit main с явной меткой `[release]` включает publish-release job.
 Обычные push и candidate не публикуют Release. CI сначала заново проверяет
 точный main commit и строит assets, затем download-artifact передаёт их publisher.
+
+Каждый успешный Windows job загружает три отдельных artifact:
+
+| Artifact | Содержимое при распаковке |
+| --- | --- |
+| MacAddressConverter-windows-x64-<ref> | MacAddressConverter.exe в корне |
+| MacAddressConverter-portable-<ref> | NetworkTools-1.1.0-windows-x64.zip в корне |
+| MacAddressConverter-verification-<ref> | dist/SHA256SUMS.txt, dist/RELEASE_VERIFICATION.json и smoke-results/ |
+
+Publisher скачивает первые два artifact в verified/dist, третий в verified.
+Таким образом четыре файла поставки находятся в одном verified/dist;
+диагностические PNG и JUnit XML остаются отдельно. Artifact выбираются по имени
+и относятся к тому же workflow run, без поиска сборки на другой ветке.
 
 Только publish job получает contents:write. Скрипт проверяет список/checksums
 assets, версию, source commit, successful smoke и hash проверенного EXE.

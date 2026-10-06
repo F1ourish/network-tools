@@ -6,6 +6,10 @@
 Server CI, source GUI tests и client acceptance имеют разную область покрытия.
 GUI skips не считаются подтверждением работы интерфейса.
 
+Кандидат 1.1.0: 223 pytest tests (186 без GUI, 37 с GUI), без ошибок и пропусков;
+28 actual-EXE checks. Результат конкретной опубликованной сборки записывается
+в приложенный RELEASE_VERIFICATION.json, включая commit и SHA-256 EXE.
+
 ## Автоматические проверки
 
 - MAC: ASCII/длина/разделители, 4 формата, регистр, CLI, clipboard и callbacks.
