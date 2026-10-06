@@ -599,19 +599,19 @@ def run_ui_checks(binary: Path) -> tuple[list[str], list[dict]]:
                         checks.append("MSS: IPv4, IPv6, manual overhead and invalid-MTU clear")
 
                         keys(0x11, ord("4"))
-                        copy_tool("[LPM] 10.20.30.0/24 access")
+                        copy_tool("[LPM] 10.20.30.0/24  access")
                         paste_control(
                             1,
                             "0.0.0.0/0 default\n10.20.0.0/16 core\n10.20.30.0/24 via A\n10.20.30.0/24 via B",
                         )
                         copy_tool(
-                            "[LPM] 10.20.30.0/24 via A",
-                            "[LPM] 10.20.30.0/24 via B",
+                            "[LPM] 10.20.30.0/24  via A",
+                            "[LPM] 10.20.30.0/24  via B",
                             "Несколько равных",
                         )
                         save_screenshot(hwnd, Path("smoke-results/routes-night.png"))
                         paste("192.0.2.5")
-                        copy_tool("[LPM] 0.0.0.0/0 default")
+                        copy_tool("[LPM] 0.0.0.0/0  default")
                         paste_control(1, "10.0.0.0/8 core")
                         copy_tool("Совпадений нет")
                         paste_control(1, "10.1.2.3/24")
