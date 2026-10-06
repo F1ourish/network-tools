@@ -1,58 +1,54 @@
-# Windows acceptance test
+# Проверка Network Tools 1.1.0
 
-Версия: 1.1; дата: 05.10.2026; статус: **server CI и standard-user EXE smoke прошли**;
-clean Windows 10/11 и DPI остаются непроверенными.
+Версия: 2.0; дата: 06.10.2026; контур: native Windows CI / отдельный client acceptance.
 
-[Фактический CI](https://github.com/F1ourish/mac-address-converter/actions/runs/37349926876): 81 pytest-тест, включая 12 тестов исходного Tk GUI,
-и 19 проверок готового EXE. В таблице разделены доказательства для EXE и исходного GUI.
-Для повторной клиентской проверки использовать тот же EXE с SHA-256 из validation report.
+Подтверждённые результаты и hashes фиксируются в VALIDATION_1_1_0.md.
+Server CI, source GUI tests и client acceptance имеют разную область покрытия.
+GUI skips не считаются подтверждением работы интерфейса.
 
-## Зафиксировать среду новой проверки
+## Автоматические проверки
 
-- Windows edition/version/build, локаль и масштаб экрана.
-- Тип учётной записи: стандартный пользователь, без elevation.
-- Установлен ли Python: для clean-client acceptance — отсутствует.
-- Путь EXE: пользовательский Downloads; дополнительно папка с пробелами и кириллицей.
-- SHA-256 конкретного EXE и источник artifact.
+- MAC: ASCII/длина/разделители, 4 формата, регистр, CLI, clipboard и callbacks.
+- IPv4: все 33 маски и границы адресов, invalid masks/CIDR, host normalization,
+  strict network, /31, /32, /0, первая/последняя страница больших сетей.
+- MSS: fixed headers IPv4/IPv6, manual overhead и ошибки MTU/чисел.
+- LPM: host/default route, равные кандидаты, порядок, комментарии, отсутствие
+  совпадения, невыравненный CIDR, лимит списка.
+- ACL: non-contiguous wildcard, полная/нулевая маска, random per-octet cross-check.
+- Persistence: corrupt/oversized settings, invalid theme, atomic replace failure.
+- GUI: defaults, live updates, CIDR paste/typing, clear/recovery, readonly/copy,
+  host pages/snapshot, темы с сохранением ввода, reload и shortcuts.
+- Готовый EXE: PE x64/windowed/asInvoker/version, bundled notices/fonts/DLL,
+  medium non-admin token, изолированный каталог, все инструменты, themes/restart.
 
-## Проверки
+```powershell
+.\.venv\Scripts\python.exe -m pytest -q --require-gui
+.\.venv\Scripts\python.exe scripts/build_windows.py
+```
 
-| № | Действие | Ожидаемый результат | Факт на 05.10.2026 |
-| --- | --- | --- | --- |
-| 1 | Запустить EXE | Компактный GUI, без console и elevation | EXE: passed на Server 2025; двойной клик на Windows 10/11 не проверен |
-| 2 | Проверить пустое окно | Colon, lowercase, Ready, Copy disabled | Исходный Tk GUI: passed; defaults после reopen EXE: passed |
-| 3 | Ctrl+V: `0011.2233.aabb` | Сразу `00:11:22:33:aa:bb` | EXE: passed |
-| 4 | Cisco | `0011.2233.aabb` | EXE: passed |
-| 5 | Hyphen | `00-11-22-33-aa-bb` | EXE: passed |
-| 6 | Plain | `00112233aabb` | EXE: passed |
-| 7 | UPPERCASE в Colon и Cisco | `00:11:22:33:AA:BB`, `0011.2233.AABB` | EXE: passed |
-| 8 | Выключить UPPERCASE | Возврат lowercase | Исходный Tk GUI: passed |
-| 9 | Copy и чтение clipboard | Только результат, Copied | EXE: содержимое passed; статус проверен Tk GUI |
-| 10 | `00:11:22:ZZ:44:55` | Пустой Result, Copy disabled, ошибка, GUI работает | EXE: clear/recovery passed; disabled/status проверены Tk GUI |
-| 11 | `123`, EUI-64, `hello` | Понятная ошибка без traceback | Validation unit tests: passed; GUI длины `123`: passed |
-| 12 | Очистить Input | Пустой Result, Ready, Copy disabled | Исходный Tk GUI: passed |
-| 13 | Снова корректный MAC | Корректный результат | EXE: passed |
-| 14 | Ctrl+A/C в Result, Ctrl+L в Input | Выделение/копирование/переход | EXE: passed |
-| 15 | Закрыть и открыть | Окно работает, default Colon/lowercase | EXE: passed, оба exit code 0 |
-| 16 | Без исходников, venv и Python PATH | EXE работает со своим runtime | EXE: passed, DLL из `_MEI...`; физически чистый client pending |
-| 17 | Папка с кириллицей и пробелами | Все операции работают | EXE: passed от стандартной учётной записи |
-| 18 | Масштаб 100%, 125%, 150% | Поля/Copy/Status видимы без fullscreen | Pending: отдельная DPI-проверка не выполнена |
-| 19 | Снять screenshot EXE | Настоящий screenshot в README | Passed, `docs/screenshot.png` |
+Второй скрипт также запускает первый этап и затем готовый EXE. Не подменять
+EXE smoke тестом исходного Python. Результаты и PNG относятся к проверенному hash.
 
-## Как работает автоматический стенд
+## Отдельная клиентская проверка
 
-Harness проверяет PE/manifest/version, runtime/licenses, токен процесса,
-загруженные DLL, keyboard conversion, форматы, uppercase, clipboard, ошибку и reopen.
-У обоих GUI процессов: `elevated=false`, `administrators_enabled=false`,
-`integrity_rid=8192`. На hosted CI используется временная стандартная учётная
-запись; она удаляется после теста. На локальной машине тест запускать из обычного
-PowerShell без elevation. Никакая инфраструктура стенда не входит в EXE.
+Зафиксировать SHA-256, Windows edition/build, локаль, DPI, тип учётной записи,
+наличие Python и путь EXE. Использовать опубликованный asset без пересборки.
 
-Server CI не доказывает работу всех клиентских Windows, разные DPI или результат
-Defender/SmartScreen. Эти пункты не отмечать passed без фактической проверки.
+| Действие | Ожидаемый результат |
+| --- | --- |
+| Стандартный пользователь, Windows 10/11 x64 без Python | Запуск EXE без console/elevation, нет missing runtime |
+| Папка с пробелами/кириллицей | Все вкладки, clipboard и restart работают |
+| 100/125/150/200% и уменьшение окна | Поля доступны, длинные результаты копируются, вертикальная прокрутка работает |
+| Дневная/ночная темы, фокус и Tab | Читаемые текст/контраст, ввод сохраняется, focus виден |
+| IPv4 192.168.1.42/24 + strict | Normal: сеть .0; strict: ошибка host bits; stale copy отсутствует |
+| IPv4 /31, /32, /0 и /8 host list | Корректные особые случаи; страницы не тормозят от размера блока |
+| MAC 0011.2233.aabb, все форматы/регистр | Значения совпадают с README |
+| MTU 1500 IPv4/IPv6 | MSS 1460/1440, overhead отдельно |
+| Маршруты /0,/16,/24 с двумя /24 | Все matching routes; два равных LPM кандидата |
+| Wildcard 0.0.255.254, test .2/.3 | Совпадение / несовпадение |
+| Ошибка и восстановление каждого ввода | Старый результат очищен, copy disabled, затем корректный расчёт |
+| Перезапуск | Только тема сохранена; все поля имеют defaults |
+| Defender/SmartScreen / корпоративные политики | Зафиксировать actual поведение unsigned EXE |
 
-## Закрытие клиентской проверки
-
-Записать pass/fail, среду, SHA-256 и настоящий screenshot в новый validation report.
-После исправления повторять соответствующую проверку. Приложить stdout pytest,
-`windows-exe.json` и SHA256SUMS, не подменять реальный запуск кодом из Python.
+Не отмечать client/DPI/security-policy пункты passed без фактической проверки.
+Для проблем приложить среду, hash, шаги и screenshot с тестовыми адресами.

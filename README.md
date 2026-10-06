@@ -1,65 +1,78 @@
-# MAC Address Converter
+# Network Tools — MAC Address Converter 1.1.0
 
-Небольшая локальная утилита на Python + Tkinter для преобразования MAC-48
-между Cisco, Colon, Hyphen и Plain. Формат ввода определяется автоматически;
-формат вывода по умолчанию — Colon, lowercase.
+Локальная Windows-утилита для сетевого инженера: MAC, IPv4, MTU/MSS, маршруты
+и ACL wildcard. Пять вкладок, дневная и ночная темы, расчёт при вводе и
+копирование результатов. Для готового EXE установка Python не требуется.
 
-**Версия 1.0.0, проверено 05.10.2026:** Windows x64 EXE собран и фактически
-запущен в [успешном CI](https://github.com/F1ourish/mac-address-converter/actions/runs/37349926876):
-**81 pytest-тест и 19 проверок готового EXE прошли**. Запуск от обычной учётной
-записи без повышения прав и загрузка встроенного Python/Tcl/Tk подтверждены.
-Проверенная среда — Windows Server 2025; Windows 10/11 и разные DPI ещё требуют
-отдельной проверки. Подробности — в [отчёте](docs/VALIDATION_2026-10-05.md).
+[Скачать релиз v1.1.0](https://github.com/F1ourish/mac-address-converter/releases/tag/v1.1.0).
+В ZIP находятся EXE, краткая инструкция, лицензии и отчёт проверки.
+Отдельно доступны EXE и `SHA256SUMS.txt`. Репозиторий приватный: для скачивания
+требуется доступ к нему. Итоги проверки — [validation report](docs/VALIDATION_1_1_0.md).
 
 ## Возможности
 
-- Автоматическая нормализация без ручного выбора формата ввода.
-- Четыре формата вывода, переключение UPPERCASE и live conversion.
-- Проверка ровно 12 ASCII hexadecimal символов; понятные ошибки без traceback.
-- Поле Result доступно для выделения, Copy копирует только результат.
-- Ctrl+C, Ctrl+V, Ctrl+A; Ctrl+L выделяет Input.
-- GUI отделён от бизнес-логики; CLI использует тот же модуль.
-- Нет внешних runtime-зависимостей, сети, телеметрии, истории и настроек.
-- Onefile/windowed сборка `MacAddressConverter.exe` с `asInvoker`.
+| Вкладка | Возможности и пример |
+| --- | --- |
+| MAC | Cisco, Colon, Hyphen, Plain; lowercase/uppercase. `0011.2233.aabb` → `00:11:22:33:aa:bb` |
+| IPv4 | IP или CIDR, выбор `/0`–`/32` или полная маска; subnet, binary mask, wildcard, broadcast, диапазон и страницы хостов. По умолчанию `192.168.1.0/24` |
+| MTU / MSS | IPv4/IPv6 и ручной overhead. IP MTU 1500 → MSS 1460 для IPv4, 1440 для IPv6 |
+| Маршруты | Список CIDR с подписями, longest prefix match, все совпадения и равные наиболее специфичные кандидаты |
+| ACL wildcard | Проверка адресного условия, включая прерывистую маску: `10.10.0.0 0.0.255.254` совпадает с `10.10.5.2`, но не с `10.10.5.3` |
 
-## Примеры
+## Использование
 
-| Input | Output format | Result |
-| --- | --- | --- |
-| `0011.2233.aabb` | Colon | `00:11:22:33:aa:bb` |
-| `00:11:22:33:aa:bb` | Cisco | `0011.2233.aabb` |
-| `0011 2233 aabb` | Hyphen | `00-11-22-33-aa-bb` |
-| `AABB.CCDD.EEFF` | Plain | `aabbccddeeff` |
-| `aabb.ccdd.eeff` | Hyphen + UPPERCASE | `AA-BB-CC-DD-EE-FF` |
+Распаковать ZIP в пользовательский каталог и запустить `MacAddressConverter.exe`.
+Можно переносить один EXE. Приложение не устанавливает драйверы или службы.
+Выбрать вкладку и ввести значения: результат обновляется сразу. При ошибке
+старые значения очищаются, копирование отключается. Readonly-поля позволяют
+выделить и скопировать значение; Copy рядом с полем копирует только его.
 
-Начальные/конечные whitespace удаляются. Внутри значения допускаются `.`, `:`,
-`-` и обычный ASCII-пробел, в том числе смешанные разделители. Внутренние табуляции,
-переносы строк, NBSP, Unicode lookalikes, `0x` и 64-битные EUI-64 не принимаются.
-Проверяется синтаксис, а не назначение адреса: broadcast/multicast и нулевой MAC
-не запрещаются. Bulk conversion и OUI lookup не входят в v1.0.
+IPv4 принимает `10.20.30.40/16` и автоматически синхронизирует маску.
+Обычный режим вычисляет сеть для IP хоста. Флажок «Проверить именно адрес сети»
+показывает ошибку, если у введённого адреса есть host bits.
+Список хостов открывается отдельным окном по 100 адресов; доступны переход
+по номеру и копирование страницы. Окно показывает снимок выбранной подсети.
 
-## Скриншот
+| Клавиши | Действие |
+| --- | --- |
+| Ctrl+1 … Ctrl+5 | Выбрать одну из пяти вкладок |
+| Ctrl+L | Выделить первое поле текущей вкладки |
+| Ctrl+A, Ctrl+C, Ctrl+V | Выделение, копирование, вставка в поле |
+| Ctrl+Shift+C | Копировать результат текущего инструмента |
+| Ctrl+Shift+T | Переключить дневную/ночную тему |
 
-![MAC Address Converter 1.0.0](docs/screenshot.png)
+## Правила расчётов
 
-Скриншот реально запущенного EXE на Windows Server 2025 в CI.
+- MAC: ровно 12 ASCII hex; внутри допустимы `.`, `:`, `-` и ASCII-пробел.
+  Проверяется синтаксис MAC-48; OUI, multicast и назначение адреса не определяются.
+- IPv4: четыре октета без ведущих нулей. Полная маска должна содержать
+  непрерывные единицы перед нулями; wildcard в поле маски не принимается.
+- `/31`: оба адреса для point-to-point, без направленного broadcast.
+  `/32`: один адрес, без broadcast подсети. `/0`: весь блок IPv4, включая
+  специальные адреса; число адресов не выдаётся за число пригодных хостов.
+  Для остальных префиксов число хостовых позиций — арифметическое `2^(32-p)-2`;
+  это не проверка допустимости конкретной сети или адреса для оборудования.
+- MSS: эффективный IP MTU минус фиксированные IP (20/40) и TCP (20) заголовки.
+  Overhead задаётся вручную. TCP/IP options, Path MTU discovery, IPv6 jumbograms
+  и проверка минимального MTU протокола не моделируются.
+- Маршруты: одна выровненная сеть CIDR на строку, затем необязательная подпись.
+  `#` начинает комментарий. Проверяется максимум 10000 строк введённого списка;
+  VRF, PBR, AD/metric, рекурсия и реальный forwarding устройства не моделируются.
+- ACL: wildcard 0 сравнивает бит, 1 игнорирует. Проверяется один адресный шаблон;
+  порядок правил, permit/deny, source/destination, протоколы и порты задаются вне утилиты.
 
-## Запуск готовой версии
+## Темы и данные
 
-Скачать и распаковать
-[проверенный Windows artifact](https://github.com/F1ourish/mac-address-converter/actions/runs/37349926876/artifacts/11362132391).
-Запустить `dist/MacAddressConverter.exe` двойным кликом. Можно скопировать только
-этот EXE в пользовательский каталог; installer и установка Python не нужны.
-Манифест `asInvoker` и фактический токен процесса подтверждают запуск без elevation.
-Artifact доступен владельцу приватного репозитория и хранится до 04.11.2026.
-
-GitHub Release пока не опубликован. Целевая среда — Windows 10/11 x64;
-результаты и оставшиеся проверки перечислены в [чеклисте](docs/TESTING.md).
+Выбор темы сохраняется в `%APPDATA%\MacAddressConverter\settings.json`.
+Сохраняется только `day`/`night`. Введённые адреса, маршруты и результаты
+не записываются в историю, файлы или логи. Приложение работает без сети.
+В системном clipboard могут действовать собственные настройки Windows.
+Повреждённые настройки темы дают дневную тему; ошибка записи не блокирует работу.
+При старте onefile EXE распаковывает свой Python/Tcl/Tk runtime в TEMP.
 
 ## Запуск из исходников
 
-Где выполнять: PowerShell в корне репозитория, Windows с CPython 3.12 x64
-и установленным Tcl/Tk. Эти команды относятся к разработке, не к конечному пользователю EXE.
+Windows, PowerShell в корне репозитория; CPython 3.12 x64 с Tcl/Tk:
 
 ```powershell
 py -3.12 -m venv .venv
@@ -68,98 +81,36 @@ py -3.12 -m venv .venv
 .\.venv\Scripts\python.exe -m mac_converter
 ```
 
-Активировать venv и менять PowerShell ExecutionPolicy не требуется.
-Для CLI из исходников:
+Активация venv и изменение ExecutionPolicy не нужны. CLI для MAC сохранён:
 
 ```powershell
-.\.venv\Scripts\python.exe -m mac_converter.cli 0011.2233.aabb --format colon
 .\.venv\Scripts\python.exe -m mac_converter.cli aabb.ccdd.eeff --format hyphen --upper
-.\.venv\Scripts\python.exe -m mac_converter.cli --version
 ```
 
-CLI также доступен как `macconv` после установки пакета. Отдельный portable
-CLI EXE в v1.0 не поставляется; GUI EXE не принимает CLI-аргументы.
-
-## Tests и проверки качества
-
-Где выполнять: корень репозитория, тот же venv.
+## Проверка и сборка
 
 ```powershell
 .\.venv\Scripts\python.exe -m pytest -q --require-gui
 .\.venv\Scripts\python.exe -m ruff check src tests scripts packaging/gui_entry.py
 .\.venv\Scripts\python.exe -m ruff format --check src tests scripts packaging/gui_entry.py
-```
-
-`--require-gui` делает отсутствие Tk-дисплея ошибкой. При обычном `pytest -q`
-GUI-тесты пропускаются без дисплея; такие результаты не доказывают работоспособность GUI.
-
-Для проверки только логики на Linux без Tk-дисплея:
-
-```bash
-python -m pytest -q tests/test_mac.py tests/test_cli.py tests/test_release.py
-```
-
-## Build
-
-Среда release-сборки: **Windows CPython 3.12.10 x64**, зависимости закреплены
-в `requirements-dev.txt`. Из корня репозитория:
-
-```powershell
 .\.venv\Scripts\python.exe scripts/build_windows.py
 ```
 
-Скрипт выполняет pytest с обязательным GUI, затем точную команду PyInstaller:
+Сборка требует Windows CPython **3.12.10 x64**, закреплённых зависимостей и
+интерактивного desktop. Скрипт запускает тесты GUI, PyInstaller и настоящий EXE
+от стандартной учётной записи, затем формирует ZIP и SHA-256.
+Linux проверяет логику командой `python -m pytest -q -m "not gui"`.
+Без Tk-дисплея обычный pytest пропускает GUI; `--require-gui` запрещает такой пропуск.
 
-```powershell
-.\.venv\Scripts\python.exe -m PyInstaller --clean --noconfirm mac-converter.spec
-```
+[Процедура выпуска](docs/BUILD_AND_RELEASE.md), [архитектура](docs/ARCHITECTURE.md),
+[клиентская проверка](docs/TESTING.md). Целевая среда — Windows 10/11 x64;
+нативный стенд — Windows Server CI. Клиентские Windows, масштаб 125–200%,
+Defender и SmartScreen требуют отдельной проверки. EXE без цифровой подписи.
+Побайтовая идентичность независимых сборок не заявляется.
 
-После сборки создаёт `dist/SHA256SUMS.txt` и проверяет **собранный EXE** отдельным
-Win32 harness. Успешный результат — EXE и успешный `smoke-results/windows-exe.json`.
-Также сохраняется настоящий `smoke-results/windows-exe.png`.
-Локальную сборку запускать из обычного PowerShell без elevation: smoke проверяет
-реальные права процесса. В hosted CI для этого временно создаётся обычная
-учётная запись; эта инфраструктура не входит в приложение.
+## Лицензии
 
-`.spec` намеренно сохранён в репозитории: onefile, `console=False`, без UPX,
-встроенный манифест `asInvoker`, version resource из `__version__`.
-Процедура воспроизводима по шагам и закреплённым версиям, но идентичность байтов
-двух независимых сборок не заявляется.
-
-## CI и release
-
-GitHub Actions запускается на push, pull_request, тегах `v*` и вручную.
-Linux job проверяет код и логику. Windows job выполняет GUI-тесты,
-PyInstaller, smoke test EXE и upload artifact. Smoke test требует рабочего
-Windows desktop; при его отсутствии pipeline должен завершиться ошибкой.
-Workflow фактически выполнен: [проверенный запуск](https://github.com/F1ourish/mac-address-converter/actions/runs/37349926876).
-
-Тег релиза должен совпадать с версией кода (`v1.0.0` для текущей версии).
-Автоматическая публикация GitHub Release на push не настроена.
-Порядок проверки и создания release — [build/release runbook](docs/BUILD_AND_RELEASE.md).
-
-## Структура
-
-| Путь | Назначение |
-| --- | --- |
-| `src/mac_converter/mac.py` | Нормализация, validation, форматирование |
-| `src/mac_converter/gui.py` | Tkinter GUI, live conversion, clipboard |
-| `src/mac_converter/main.py`, `__main__.py` | GUI entry points |
-| `src/mac_converter/cli.py` | CLI поверх того же MAC API |
-| `tests/` | Unit, GUI и release-tag tests |
-| `packaging/`, `mac-converter.spec` | Windows entry, manifest, PyInstaller configuration |
-| `scripts/` | Сборка, проверка EXE и release tag |
-| `.github/workflows/build.yml` | Tests, Windows build, artifact |
-| `docs/` | Архитектура, проверка, эксплуатационная процедура |
-
-## Privacy
-
-Введённый MAC не записывается в файлы или логи; приложение не использует сеть.
-Copy помещает результат в системный clipboard. Его дальнейшее хранение,
-например в Windows clipboard history, определяется настройками самой Windows.
-
-## Лицензия
-
-Код приложения — MIT, см. [LICENSE](LICENSE). В bundled runtime действуют
-лицензии Python и Tcl/Tk; заметки для распространения —
+Код приложения — [MIT](LICENSE). Runtime включает CPython, Tcl/Tk,
+ttkbootstrap, Pillow и PyInstaller bootloader с собственными лицензиями.
+Оригинальные notices сохранены в EXE и ZIP:
 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

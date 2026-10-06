@@ -3,6 +3,7 @@ from pathlib import Path
 from runpy import run_path
 from importlib.metadata import distribution
 import sys
+from PyInstaller.utils.hooks import collect_data_files
 
 from PyInstaller.utils.win32.versioninfo import (
     FixedFileInfo, StringFileInfo, StringStruct, StringTable, VarFileInfo, VarStruct, VSVersionInfo,
@@ -31,6 +32,19 @@ pyinstaller_notice = next(
 if pyinstaller_notice is None or not pyinstaller_notice.is_file():
     raise SystemExit("Missing PyInstaller COPYING.txt in the pinned build installation")
 notices.append((str(pyinstaller_notice), "third_party/PyInstaller"))
+for component, package in (("ttkbootstrap", "ttkbootstrap"), ("Pillow", "pillow")):
+    installed = distribution(package)
+    license_path = next(
+        (installed.locate_file(path) for path in installed.files or []
+         if str(path).endswith(".dist-info/licenses/LICENSE")), None,
+    )
+    if license_path is None or not license_path.is_file():
+        raise SystemExit(f"Missing {component} license in the pinned installation")
+    notices.append((str(license_path), f"third_party/{component}"))
+icon_license = distribution("ttkbootstrap").locate_file("ttkbootstrap/assets/icons/LICENSE")
+if not icon_license.is_file():
+    raise SystemExit("Missing bundled Bootstrap Icons license")
+notices.append((str(icon_license), "third_party/BootstrapIcons"))
 version_info = VSVersionInfo(
     ffi=FixedFileInfo(
         filevers=numeric_version, prodvers=numeric_version, mask=0x3F, flags=0,
@@ -39,9 +53,9 @@ version_info = VSVersionInfo(
     kids=[
         StringFileInfo([
             StringTable("040904B0", [
-                StringStruct("FileDescription", "MAC Address Converter"),
+                StringStruct("FileDescription", "Network Tools - MAC and IPv4 utilities"),
                 StringStruct("FileVersion", version),
-                StringStruct("ProductName", "MAC Address Converter"),
+                StringStruct("ProductName", "Network Tools"),
                 StringStruct("ProductVersion", version),
                 StringStruct("OriginalFilename", "MacAddressConverter.exe"),
             ])
@@ -53,7 +67,7 @@ version_info = VSVersionInfo(
 a = Analysis(
     [str(root / "packaging" / "gui_entry.py")],
     pathex=[str(root / "src")],
-    binaries=[], datas=notices, hiddenimports=[], hookspath=[], hooksconfig={},
+    binaries=[], datas=notices + collect_data_files("ttkbootstrap"), hiddenimports=[], hookspath=[], hooksconfig={},
     runtime_hooks=[], excludes=[], noarchive=False,
 )
 pyz = PYZ(a.pure)

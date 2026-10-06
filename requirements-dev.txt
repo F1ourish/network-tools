@@ -1,4 +1,6 @@
 # Exact direct and transitive versions for Python 3.12, Windows x64 / Linux x64.
+ttkbootstrap==2.2.3
+Pillow==12.3.0
 pytest==8.4.2
 ruff==0.13.3
 iniconfig==2.3.0

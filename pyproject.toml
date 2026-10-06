@@ -5,11 +5,11 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "mac-address-converter"
 dynamic = ["version"]
-description = "Portable Tkinter MAC-48 address converter"
+description = "Portable offline network tools: MAC, IPv4, MSS, routes and ACL wildcard"
 readme = "README.md"
 requires-python = ">=3.12"
 license = "MIT"
-dependencies = []
+dependencies = ["ttkbootstrap==2.2.3", "Pillow==12.3.0"]
 
 [project.scripts]
 macconv = "mac_converter.cli:main"

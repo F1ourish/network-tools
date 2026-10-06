@@ -67,9 +67,15 @@ def verify_binary(binary: Path) -> list[str]:
         "third_party/tcl/tcl-license.txt",
         "third_party/tk/license.terms",
         "third_party/pyinstaller/copying.txt",
+        "third_party/ttkbootstrap/license",
+        "third_party/pillow/license",
+        "third_party/bootstrapicons/license",
     ):
         assert required in names, f"Missing embedded runtime component: {required}"
-    checks.append("Python/Tcl/Tk runtime and original third-party notices embedded")
+    assert any(
+        name.startswith("ttkbootstrap/assets/") and name.endswith(".ttf") for name in names
+    ), "Missing ttkbootstrap icon font"
+    checks.append("Python/Tcl/Tk, ttkbootstrap fonts and original third-party notices embedded")
     return checks
 
 
@@ -256,6 +262,24 @@ def run_ui_checks(binary: Path) -> tuple[list[str], list[dict]]:
         keys(0x11, ord("C"))
         wait_until(lambda: read_clipboard() == expected)
 
+    def copy_tool(*fragments):
+        write_clipboard("tool copy sentinel")
+        keys(0x11, 0x10, ord("C"))
+        return wait_until(
+            lambda: (value := read_clipboard()) and all(fragment in value for fragment in fragments)
+        )
+
+    def paste_control(tab_count, value):
+        focus_control(tab_count)
+        keys(0x11, ord("A"))
+        write_clipboard(value)
+        keys(0x11, ord("V"))
+
+    def assert_invalid_copy():
+        write_clipboard("invalid tool sentinel")
+        keys(0x11, 0x10, ord("C"))
+        assert read_clipboard() == "invalid tool sentinel", "Invalid tool copied a stale result"
+
     def find_window(expected_path):
         matches = []
 
@@ -406,6 +430,18 @@ def run_ui_checks(binary: Path) -> tuple[list[str], list[dict]]:
                             paste("AABB.CCDD.EEFF")
                             assert_result("aa:bb:cc:dd:ee:ff")
                             checks.append("Reopen: default Colon/lowercase restored")
+                            keys(0x11, ord("2"))
+                            copy_tool("Подсеть CIDR: 192.168.1.0/24", "Wildcard: 0.0.0.255")
+                            save_screenshot(hwnd, Path("smoke-results/ipv4-night-reopen.png"))
+                            assert json.loads(
+                                (
+                                    Path(environment["APPDATA"])
+                                    / "MacAddressConverter/settings.json"
+                                ).read_text()
+                            ) == {"theme": "night"}
+                            checks.append(
+                                "Reopen: saved night theme; IPv4 defaults restored; entered addresses not persisted"
+                            )
                             continue
 
                         paste("0011.2233.aabb")
@@ -443,6 +479,99 @@ def run_ui_checks(binary: Path) -> tuple[list[str], list[dict]]:
                         paste("aabb.ccdd.eeff")
                         assert_result("AABB.CCDD.EEFF")
                         checks.append("Invalid input clears result; application recovers")
+
+                        keys(0x11, ord("2"))
+                        copy_tool(
+                            "Адрес подсети: 192.168.1.0",
+                            "Первый хост: 192.168.1.1",
+                            "Последний хост: 192.168.1.254",
+                            "Broadcast подсети: 192.168.1.255",
+                            "Полная маска: 255.255.255.0",
+                            "Wildcard: 0.0.0.255",
+                            "Двоичная маска: 11111111.11111111.11111111.00000000",
+                        )
+                        save_screenshot(hwnd, Path("smoke-results/ipv4-day.png"))
+                        checks.append(
+                            "IPv4 defaults: subnet, hosts, broadcast, full/binary mask and wildcard"
+                        )
+                        paste("10.20.30.40/16")
+                        copy_tool("Подсеть CIDR: 10.20.0.0/16", "Первый хост: 10.20.0.1")
+                        paste_control(1, "255.0.255.0")
+                        assert_invalid_copy()
+                        paste_control(1, "/24")
+                        copy_tool("Подсеть CIDR: 10.20.30.0/24")
+                        checks.append(
+                            "IPv4 CIDR paste, mask override, invalid-mask clear and recovery"
+                        )
+                        for cidr, expected in (
+                            ("192.0.2.0/31", "Хостовых позиций: 2"),
+                            ("192.0.2.7/32", "Хостовых позиций: 1"),
+                        ):
+                            paste(cidr)
+                            copy_tool(expected, "Broadcast подсети: Не применяется")
+                        paste("0.0.0.0/0")
+                        copy_tool("Хостовых позиций: —", "Всего адресов: 4294967296")
+                        checks.append("IPv4 /31, /32 and /0 conventions through the EXE")
+                        paste("192.168.1.0/24")
+                        before_theme = copy_tool("Подсеть CIDR: 192.168.1.0/24")
+                        keys(0x11, 0x10, ord("T"))
+                        assert copy_tool("Подсеть CIDR: 192.168.1.0/24") == before_theme
+                        settings_path = (
+                            Path(environment["APPDATA"]) / "MacAddressConverter/settings.json"
+                        )
+                        wait_until(lambda: settings_path.is_file())
+                        assert json.loads(settings_path.read_text()) == {"theme": "night"}
+                        save_screenshot(hwnd, Path("smoke-results/ipv4-night.png"))
+                        checks.append("Theme toggle preserves calculation; only theme is saved")
+
+                        keys(0x11, ord("3"))
+                        paste("1492")
+                        copy_tool("TCP MSS: 1452")
+                        focus_control(2)
+                        keys(0x28)
+                        keys(0x0D)
+                        copy_tool("TCP MSS: 1432", "Фиксированный IP-заголовок: 40")
+                        paste_control(1, "60")
+                        copy_tool("TCP MSS: 1372", "Эффективный IP MTU: 1432")
+                        save_screenshot(hwnd, Path("smoke-results/mss-night.png"))
+                        paste("40")
+                        assert_invalid_copy()
+                        checks.append("MSS: IPv4, IPv6, manual overhead and invalid-MTU clear")
+
+                        keys(0x11, ord("4"))
+                        copy_tool("[LPM] 10.20.30.0/24 access")
+                        paste_control(
+                            1,
+                            "0.0.0.0/0 default\n10.20.0.0/16 core\n10.20.30.0/24 via A\n10.20.30.0/24 via B",
+                        )
+                        copy_tool(
+                            "[LPM] 10.20.30.0/24 via A",
+                            "[LPM] 10.20.30.0/24 via B",
+                            "Несколько равных",
+                        )
+                        save_screenshot(hwnd, Path("smoke-results/routes-night.png"))
+                        paste("192.0.2.5")
+                        copy_tool("[LPM] 0.0.0.0/0 default")
+                        paste_control(1, "10.0.0.0/8 core")
+                        copy_tool("Совпадений нет")
+                        paste_control(1, "10.1.2.3/24")
+                        assert_invalid_copy()
+                        checks.append(
+                            "Routes: LPM, equal-prefix candidates, default, no match and invalid CIDR"
+                        )
+
+                        keys(0x11, ord("5"))
+                        copy_tool(
+                            "Совпадение: Совпадает", "Адресное условие: 10.10.0.0 0.0.255.254"
+                        )
+                        paste_control(2, "10.10.5.3")
+                        copy_tool("Совпадение: Не совпадает")
+                        save_screenshot(hwnd, Path("smoke-results/acl-night.png"))
+                        paste_control(1, "/24")
+                        assert_invalid_copy()
+                        checks.append(
+                            "ACL: non-contiguous wildcard match, mismatch and invalid clear"
+                        )
                     except BaseException as error:
                         target = Path("smoke-results")
                         target.mkdir(exist_ok=True)

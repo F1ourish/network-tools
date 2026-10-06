@@ -23,14 +23,14 @@ def tk_runtime(request):
 
 
 @pytest.fixture
-def app(tk_runtime):
+def app(tk_runtime, tmp_path):
     import tkinter as tk
 
     from mac_converter.gui import MacConverterApp
 
     # Keep one Tcl/Tk interpreter; each test still gets a fresh application window.
     root = tk.Toplevel(tk_runtime)
-    instance = MacConverterApp(root)
+    instance = MacConverterApp(root, settings_path=tmp_path / "settings.json")
     root.update()
     try:
         yield instance
