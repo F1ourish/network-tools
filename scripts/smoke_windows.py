@@ -128,6 +128,8 @@ def run_ui_checks(binary: Path) -> tuple[list[str], list[dict]]:
     user32.IsWindowVisible.argtypes = [wt.HWND]
     user32.SetForegroundWindow.argtypes = [wt.HWND]
     user32.GetForegroundWindow.restype = wt.HWND
+    user32.GetDpiForWindow.argtypes = [wt.HWND]
+    user32.GetDpiForWindow.restype = wt.UINT
     user32.ShowWindow.argtypes = [wt.HWND, ct.c_int]
     user32.GetWindowRect.argtypes = [wt.HWND, ct.POINTER(wt.RECT)]
     user32.PostMessageW.argtypes = [wt.HWND, wt.UINT, wt.WPARAM, wt.LPARAM]
@@ -280,14 +282,14 @@ def run_ui_checks(binary: Path) -> tuple[list[str], list[dict]]:
         keys(0x11, 0x10, ord("C"))
         assert read_clipboard() == "invalid tool sentinel", "Invalid tool copied a stale result"
 
-    def find_window(expected_path):
+    def find_window(expected_path, title_prefix="MAC Address Converter "):
         matches = []
 
         @callback_type
         def visit(hwnd, _parameter):
             title = ct.create_unicode_buffer(256)
             user32.GetWindowTextW(hwnd, title, len(title))
-            if not title.value.startswith("MAC Address Converter ") or not user32.IsWindowVisible(
+            if not title.value.startswith(title_prefix) or not user32.IsWindowVisible(
                 hwnd
             ):
                 return True
@@ -416,6 +418,7 @@ def run_ui_checks(binary: Path) -> tuple[list[str], list[dict]]:
                         security = process_security(pid.value)
                         assert_unprivileged(security)
                         security["runtime_dlls"] = process_runtime(pid.value)
+                        security["display"] = {"width": user32.GetSystemMetrics(0), "height": user32.GetSystemMetrics(1), "window_dpi": user32.GetDpiForWindow(hwnd)}
                         execution_tokens.append(security)
                         checks.append(
                             f"Launch {launch + 1}: GUI in isolated folder with spaces/Unicode"
@@ -494,6 +497,39 @@ def run_ui_checks(binary: Path) -> tuple[list[str], list[dict]]:
                         checks.append(
                             "IPv4 defaults: subnet, hosts, broadcast, full/binary mask and wildcard"
                         )
+                        focus_control(28)
+                        keys(0x20)
+                        host_hwnd = wait_until(lambda: find_window(isolated.resolve(), "Адреса: "))
+                        user32.SetForegroundWindow(host_hwnd)
+                        wait_until(lambda: user32.GetForegroundWindow() == host_hwnd)
+                        write_clipboard("host page sentinel")
+                        keys(0x11, ord("A"))
+                        keys(0x11, ord("C"))
+                        wait_until(lambda: (text := read_clipboard()) and len(text.splitlines()) == 100 and text.splitlines()[0] == "192.168.1.1")
+                        keys(0x09)  # First page: disabled Previous is skipped, focus Next.
+                        keys(0x20)
+                        keys(0x10, 0x09)  # Previous is now enabled.
+                        keys(0x10, 0x09)  # Back to the readonly host list.
+                        write_clipboard("host second-page sentinel")
+                        keys(0x11, ord("A"))
+                        keys(0x11, ord("C"))
+                        wait_until(lambda: (text := read_clipboard()) and text.splitlines()[0] == "192.168.1.101")
+                        for _ in range(3):
+                            keys(0x09)  # Previous, Next, page number.
+                        keys(0x11, ord("A"))
+                        write_clipboard("3")
+                        keys(0x11, ord("V"))
+                        keys(0x09)
+                        keys(0x20)  # Go to page 3.
+                        keys(0x09)
+                        write_clipboard("host last-page sentinel")
+                        keys(0x20)  # Copy current page button.
+                        wait_until(lambda: (text := read_clipboard()) and len(text.splitlines()) == 54 and text.splitlines()[-1] == "192.168.1.254")
+                        save_screenshot(host_hwnd, Path("smoke-results/hosts-day.png"))
+                        user32.PostMessageW(host_hwnd, 0x0010, 0, 0)
+                        user32.SetForegroundWindow(hwnd)
+                        wait_until(lambda: user32.GetForegroundWindow() == hwnd)
+                        checks.append("Host dialog: first/second/last page, jump and page copy through the EXE")
                         paste("10.20.30.40/16")
                         copy_tool("Подсеть CIDR: 10.20.0.0/16", "Первый хост: 10.20.0.1")
                         paste_control(1, "255.0.255.0")
@@ -529,6 +565,7 @@ def run_ui_checks(binary: Path) -> tuple[list[str], list[dict]]:
                         copy_tool("TCP MSS: 1452")
                         focus_control(2)
                         keys(0x28)
+                        keys(0x23)  # Open list, then End selects IPv6.
                         keys(0x0D)
                         copy_tool("TCP MSS: 1432", "Фиксированный IP-заголовок: 40")
                         paste_control(1, "60")

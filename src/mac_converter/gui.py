@@ -171,7 +171,11 @@ class MacConverterApp:
         self._acl_update()
         self.status.set("Ready")
         root.minsize(820, 610)
-        root.geometry("940x650")
+        width = max(820, min(940, root.winfo_screenwidth() - 80))
+        height = max(610, min(760, root.winfo_screenheight() - 90))
+        x = max(0, (root.winfo_screenwidth() - width) // 2)
+        y = max(0, (root.winfo_screenheight() - height) // 2 - 20)
+        root.geometry(f"{width}x{height}+{x}+{y}")
         root.after_idle(self.input_entry.focus_set)
 
     def _bind_selection(self, widget):
@@ -693,6 +697,7 @@ class MacConverterApp:
         )
         self._render_host_page()
         self._apply_theme()
+        window.after_idle(self.host_text.focus_set)
 
     def _render_host_page(self):
         result = host_page(self.host_calculation, self.host_page_number)
