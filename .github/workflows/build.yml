@@ -64,13 +64,25 @@ jobs:
         run: python scripts/check_release_tag.py
       - name: GUI tests, PyInstaller and real EXE smoke
         run: python scripts/build_windows.py
-      - name: Upload verified Windows artifact
+      - name: Upload verified Windows EXE
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: MacAddressConverter-windows-x64-${{ github.ref_name }}
+          path: dist/MacAddressConverter.exe
+          if-no-files-found: error
+          retention-days: 30
+      - name: Upload portable ZIP
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: MacAddressConverter-portable-${{ github.ref_name }}
+          path: dist/NetworkTools-*-windows-x64.zip
+          if-no-files-found: error
+          retention-days: 30
+      - name: Upload verification and screenshots
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: MacAddressConverter-verification-${{ github.ref_name }}
           path: |
-            dist/MacAddressConverter.exe
-            dist/NetworkTools-*-windows-x64.zip
             dist/SHA256SUMS.txt
             dist/RELEASE_VERIFICATION.json
             smoke-results/
@@ -99,6 +111,14 @@ jobs:
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           name: MacAddressConverter-windows-x64-main
+          path: verified/dist
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: MacAddressConverter-portable-main
+          path: verified/dist
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: MacAddressConverter-verification-main
           path: verified
       - name: Verify assets and publish the tested commit
         env:
