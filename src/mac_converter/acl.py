@@ -246,7 +246,7 @@ def _kind_for_number(name):
 
 
 def parse_acl(value: str) -> Acl:
-    if len(value) > 1_000_000 or len(value.splitlines()) > 10000:
+    if len(value.encode("utf-8")) > 1_000_000 or len(value.splitlines()) > 10000:
         raise InvalidNetworkInput("Допускается до 10000 строк и 1 МБ текста ACL.")
     rules, sequences = [], set()
     name, kind = "", None
@@ -255,7 +255,7 @@ def parse_acl(value: str) -> Acl:
         text = raw.strip()
         if not text or text.startswith(("!", "#")) or text.lower() in ("exit", "end"):
             continue
-        text = re.sub(r"\s+\([0-9]+ matches?\)\s*$", "", text, flags=re.I)
+        text = re.sub(r"\s+\([0-9]+ match(?:es)?\)\s*$", "", text, flags=re.I)
         words = text.split()
         try:
             config = re.fullmatch(r"ip access-list (standard|extended) (\S+)", text, re.I)

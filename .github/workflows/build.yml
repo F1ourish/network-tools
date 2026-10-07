@@ -43,11 +43,13 @@ jobs:
           destination = pathlib.Path('/tmp/candidate-format/tools')
           destination.mkdir()
           for path in packages.iterdir():
-              if path.name.startswith(('ruff', 'pytest', '_pytest', 'pluggy', 'iniconfig', 'packaging', 'pygments')):
+              if path.name == 'py.py' or path.name.startswith(('ruff', 'pytest', '_pytest', 'pluggy', 'iniconfig', 'packaging', 'pygments')):
                   if path.is_dir():
                       shutil.copytree(path, destination / path.name)
                   else:
                       shutil.copy2(path, destination / path.name)
+          (destination / 'bin').mkdir()
+          shutil.copy2(shutil.which('ruff'), destination / 'bin' / 'ruff')
           PYTOOLS
           tar -czf candidate-format.tar.gz -C /tmp/candidate-format .
       - name: Upload candidate formatting

@@ -275,7 +275,9 @@ class MacConverterApp:
             if replace:
                 widget.delete("1.0", tk.END)
             elif widget.tag_ranges(tk.SEL):
+                start = widget.index(tk.SEL_FIRST)
                 widget.delete(tk.SEL_FIRST, tk.SEL_LAST)
+                widget.mark_set(tk.INSERT, start)
             widget.insert(tk.INSERT, value)
         else:
             if replace:
@@ -305,11 +307,8 @@ class MacConverterApp:
         return "break"
 
     def _cut_selection(self, widget):
-        if self._editable(widget) and self._selection(widget):
-            self._copy_selection(widget)
-            if isinstance(widget, tk.Text):
-                widget.delete(tk.SEL_FIRST, tk.SEL_LAST)
-            else:
+        if self._editable(widget) and (value := self._selection(widget)):
+            if self._copy(value):
                 widget.delete(tk.SEL_FIRST, tk.SEL_LAST)
         return "break"
 
@@ -1370,15 +1369,16 @@ class MacConverterApp:
 
     def _copy(self, value):
         if not value:
-            return
+            return False
         try:
             self.root.clipboard_clear()
             self.root.clipboard_append(value)
             self.root.update_idletasks()
         except tk.TclError:
             self.status.set("Clipboard unavailable. Try Copy again.")
-            return
+            return False
         self.status.set("Copied")
+        return True
 
     def copy_result(self):
         self._copy(self.result.get())
