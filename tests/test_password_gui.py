@@ -1,4 +1,6 @@
+import ctypes
 import json
+import sys
 import tkinter as tk
 
 import pytest
@@ -83,8 +85,13 @@ def test_clipboard_auto_clear_preserves_replaced_clipboard(app):
     assert app.password_result.get() == value
     app.copy_password()
     app._clear_password_clipboard()
-    with pytest.raises(tk.TclError):
-        app.root.clipboard_get()
+    app.root.update()
+    if sys.platform == "win32":
+        # Tk may still have a cached selection; verify the actual OS clipboard.
+        assert not ctypes.WinDLL("user32").IsClipboardFormatAvailable(13)
+    else:
+        with pytest.raises(tk.TclError):
+            app.root.clipboard_get()
 
 
 def test_clear_button_clears_only_owned_clipboard_and_masks(app):
