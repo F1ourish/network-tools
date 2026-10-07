@@ -9,7 +9,15 @@ from types import TracebackType
 import ttkbootstrap as ttk
 
 from . import __version__
+from .help_content import TOOL_HELP
 from .mac import InvalidMacAddress, format_mac
+from .passwords import (
+    DEFAULT_SYMBOLS,
+    InvalidPasswordOptions,
+    PasswordOptions,
+    entropy_bits,
+    generate_password,
+)
 from .network import (
     InvalidNetworkInput,
     IPv4Calculation,
@@ -82,6 +90,9 @@ class MacConverterApp:
         self.ipv4_calculation: IPv4Calculation | None = None
         self.host_window = None
         self.host_page_number = 0
+        self.help_window = None
+        self._clipboard_job = None
+        self._copied_password = None
         self.status = tk.StringVar(root, value="Ready")
 
         shell = ttk.Frame(root, padding=(20, 16))
@@ -109,10 +120,13 @@ class MacConverterApp:
         )
         self.theme_selector.grid(row=0, column=2)
         self.theme_selector.bind("<<ComboboxSelected>>", self._theme_selected)
+        self.help_button = ttk.Button(header, text="Помощь · F1", command=self.show_help)
+        self.help_button.grid(row=1, column=1, columnspan=2, sticky="e", pady=(5, 0))
         self.notebook = ttk.Notebook(shell)
         self.notebook.grid(row=1, column=0, sticky="nsew")
         self.pages = []
-        for name in ("MAC", "IPv4", "MTU / MSS", "Маршруты", "ACL wildcard"):
+        for topic in TOOL_HELP:
+            name = topic.name
             viewport = ttk.Frame(self.notebook)
             viewport.columnconfigure(0, weight=1)
             viewport.rowconfigure(0, weight=1)
@@ -144,6 +158,7 @@ class MacConverterApp:
                 self._build_mss,
                 self._build_routes,
                 self._build_acl,
+                self._build_passwords,
             ),
             self.pages,
             strict=True,
@@ -151,10 +166,12 @@ class MacConverterApp:
             builder(page)
         self.status_label = ttk.Label(shell, textvariable=self.status, wraplength=760)
         self.status_label.grid(row=2, column=0, sticky="ew", pady=(12, 0))
-        self.notebook.bind("<<NotebookTabChanged>>", lambda _event: self.status.set("Ready"))
+        self.notebook.bind("<<NotebookTabChanged>>", self._tool_changed)
+        root.bind("<F1>", self.show_help)
+        root.bind("<Destroy>", self._destroyed, add="+")
         root.bind("<Control-l>", self.focus_input)
         root.bind("<Control-L>", self.focus_input)
-        for index in range(5):
+        for index in range(len(TOOL_HELP)):
             root.bind(
                 f"<Control-Key-{index + 1}>", lambda event, page=index: self.select_tool(page)
             )
@@ -439,6 +456,251 @@ class MacConverterApp:
         for variable in (self.acl_base, self.acl_wildcard, self.acl_address):
             variable.trace_add("write", self._acl_update)
 
+    def _build_passwords(self, page):
+        self.password_length = tk.StringVar(self.root, value="20")
+        self.password_groups = {
+            name: tk.BooleanVar(self.root, value=True)
+            for name in ("lowercase", "uppercase", "digits", "symbols")
+        }
+        self.password_ambiguous = tk.BooleanVar(self.root, value=True)
+        self.password_symbols = tk.StringVar(self.root, value=DEFAULT_SYMBOLS)
+        self.password_result = tk.StringVar(self.root)
+        self.password_error = tk.StringVar(self.root)
+        self.password_info = tk.StringVar(self.root)
+        self.password_show = tk.BooleanVar(self.root, value=False)
+        self.password_auto_clear = tk.BooleanVar(self.root, value=True)
+        inputs = ttk.Frame(page)
+        inputs.grid(row=0, column=0, sticky="ew")
+        inputs.columnconfigure(0, weight=1)
+        inputs.columnconfigure(1, weight=3)
+        self.password_length_entry = self._field(inputs, "Длина · 8–128", self.password_length)
+        self.password_symbols_entry = self._field(
+            inputs, "Допустимые спецсимволы", self.password_symbols, 1
+        )
+        choices = ttk.Frame(page)
+        choices.grid(row=1, column=0, sticky="w", pady=(16, 10))
+        self.password_group_buttons = {}
+        for col, (name, label) in enumerate(
+            (
+                ("lowercase", "a–z"),
+                ("uppercase", "A–Z"),
+                ("digits", "0–9"),
+                ("symbols", "Спецсимволы"),
+            )
+        ):
+            button = ttk.Checkbutton(
+                choices, text=label, variable=self.password_groups[name], takefocus=True
+            )
+            button.grid(row=0, column=col, padx=(0, 24))
+            self.password_group_buttons[name] = button
+        self.password_ambiguous_button = ttk.Checkbutton(
+            page, text="Без похожих символов: 0 O 1 I l |", variable=self.password_ambiguous
+        )
+        self.password_ambiguous_button.grid(row=2, column=0, sticky="w", pady=(2, 10))
+        ttk.Label(page, textvariable=self.password_error, bootstyle="danger", wraplength=780).grid(
+            row=3, column=0, sticky="ew", pady=(0, 8)
+        )
+        self.password_generate_button = ttk.Button(
+            page, text="Сгенерировать", command=self.generate_password, bootstyle="primary"
+        )
+        self.password_generate_button.grid(row=4, column=0, sticky="w", pady=(0, 16))
+        output = ttk.Frame(page)
+        output.grid(row=5, column=0, sticky="ew")
+        output.columnconfigure(0, weight=1)
+        self.password_result_entry = ttk.Entry(
+            output,
+            textvariable=self.password_result,
+            state="readonly",
+            show="*",
+            font=self.fixed_font,
+        )
+        self.password_result_entry.grid(row=0, column=0, sticky="ew")
+        self._bind_selection(self.password_result_entry)
+        self.password_copy_button = ttk.Button(
+            output, text="Copy", command=self.copy_password, state="disabled"
+        )
+        self.password_copy_button.grid(row=0, column=1, padx=(10, 0))
+        self.password_clear_button = ttk.Button(
+            output, text="Очистить", command=self.clear_password
+        )
+        self.password_clear_button.grid(row=0, column=2, padx=(8, 0))
+        self.password_show_button = ttk.Checkbutton(
+            page, text="Показать", variable=self.password_show, command=self._password_visibility
+        )
+        self.password_show_button.grid(row=6, column=0, sticky="w", pady=(12, 8))
+        ttk.Checkbutton(
+            page,
+            text="Очищать скопированный пароль из буфера через 30 с",
+            variable=self.password_auto_clear,
+        ).grid(row=7, column=0, sticky="w", pady=(0, 12))
+        ttk.Label(
+            page, textvariable=self.password_info, bootstyle="secondary", wraplength=780
+        ).grid(row=8, column=0, sticky="ew")
+        ttk.Label(
+            page,
+            text="Каждая выбранная группа попадёт в пароль. Генерация выполняется локально; пароли не сохраняются. Правила целевой системы могут ограничивать символы.",
+            wraplength=780,
+            bootstyle="secondary",
+        ).grid(row=9, column=0, sticky="ew", pady=(16, 0))
+        for variable in (
+            self.password_length,
+            self.password_symbols,
+            self.password_ambiguous,
+            *self.password_groups.values(),
+        ):
+            variable.trace_add("write", self._password_options_changed)
+        self._password_options_changed()
+
+    def _password_options(self):
+        text = self.password_length.get().strip()
+        if not re.fullmatch(r"[0-9]{1,3}", text):
+            raise InvalidPasswordOptions("Длина: целое число от 8 до 128.")
+        return PasswordOptions(
+            length=int(text),
+            exclude_ambiguous=self.password_ambiguous.get(),
+            symbol_chars=self.password_symbols.get(),
+            **{name: value.get() for name, value in self.password_groups.items()},
+        )
+
+    def _password_options_changed(self, *_args):
+        self.password_result.set("")
+        self.password_copy_button.state(["disabled"])
+        self.password_show.set(False)
+        self._password_visibility()
+        self.password_symbols_entry.configure(
+            state="normal" if self.password_groups["symbols"].get() else "disabled"
+        )
+        try:
+            options = self._password_options()
+            bits = entropy_bits(options)
+        except InvalidPasswordOptions as error:
+            self.password_error.set(str(error))
+            self.password_info.set("")
+            self.password_generate_button.state(["disabled"])
+            return
+        self.password_error.set("")
+        self.password_generate_button.state(["!disabled"])
+        hint = (
+            " Для обычных учётных записей лучше использовать 16–20 и более символов."
+            if options.length < 16
+            else ""
+        )
+        if bits < 64:
+            hint += " Небольшое пространство вариантов: увеличьте длину или набор символов."
+        self.password_info.set(f"Энтропия равномерной генерации: ≈{bits:.1f} бит.{hint}")
+
+    def generate_password(self):
+        self.password_result.set("")
+        self.password_copy_button.state(["disabled"])
+        self.password_show.set(False)
+        self._password_visibility()
+        try:
+            value = generate_password(self._password_options())
+        except InvalidPasswordOptions as error:
+            self.password_error.set(str(error))
+            return
+        except OSError:
+            self.password_error.set("Системный источник случайности недоступен. Пароль не создан.")
+            return
+        self.password_result.set(value)
+        self.password_error.set("")
+        self.password_copy_button.state(["!disabled"])
+        self.status.set("Пароль создан")
+
+    def _password_visibility(self):
+        self.password_result_entry.configure(show="" if self.password_show.get() else "*")
+
+    def copy_password(self):
+        value = self.password_result.get()
+        if not value:
+            return
+        try:
+            self.root.clipboard_clear()
+            self.root.clipboard_append(value)
+            self.root.update_idletasks()
+        except tk.TclError:
+            self.status.set("Clipboard unavailable. Try Copy again.")
+            return
+        self._cancel_clipboard_job()
+        self._copied_password = value
+        if self.password_auto_clear.get():
+            self._clipboard_job = self.root.after(30000, self._clear_password_clipboard)
+            self.status.set("Copied · автоочистка буфера через 30 с")
+        else:
+            self.status.set("Copied")
+
+    def _cancel_clipboard_job(self):
+        if self._clipboard_job is not None:
+            self.root.after_cancel(self._clipboard_job)
+            self._clipboard_job = None
+
+    def _clear_password_clipboard(self):
+        self._cancel_clipboard_job()
+        try:
+            if self._copied_password and self.root.clipboard_get() == self._copied_password:
+                self.root.clipboard_clear()
+        except tk.TclError:
+            pass
+        self._copied_password = None
+
+    def clear_password(self):
+        self.password_result.set("")
+        self.password_copy_button.state(["disabled"])
+        self.password_show.set(False)
+        self._password_visibility()
+        self._clear_password_clipboard()
+        self.status.set("Пароль очищен")
+
+    def _destroyed(self, event):
+        if event.widget == self.root:
+            self._clear_password_clipboard()
+            self.password_result.set("")
+
+    def _tool_changed(self, _event=None):
+        self.status.set("Ready")
+        if hasattr(self, "password_show"):
+            self.password_show.set(False)
+            self._password_visibility()
+        if self.help_window is not None and self.help_window.winfo_exists():
+            self._update_help()
+
+    def show_help(self, _event=None):
+        if self.help_window is not None and self.help_window.winfo_exists():
+            self._update_help()
+            self.help_window.lift()
+            self.help_text.focus_set()
+            return "break"
+        window = tk.Toplevel(self.root)
+        self.help_window = window
+        window.transient(self.root)
+        window.geometry("700x570")
+        window.minsize(540, 400)
+        frame = ttk.Frame(window, padding=16)
+        frame.pack(fill="both", expand=True)
+        frame.columnconfigure(0, weight=1)
+        frame.rowconfigure(1, weight=1)
+        self.help_title = tk.StringVar(window)
+        ttk.Label(frame, textvariable=self.help_title, font=("TkDefaultFont", 14, "bold")).grid(
+            row=0, column=0, sticky="w", pady=(0, 12)
+        )
+        container, self.help_text = self._text_widget(frame, height=20, readonly=True)
+        self.help_text.configure(font="TkDefaultFont")
+        container.grid(row=1, column=0, sticky="nsew")
+        self.help_close_button = ttk.Button(frame, text="Закрыть", command=window.destroy)
+        self.help_close_button.grid(row=2, column=0, sticky="e", pady=(12, 0))
+        window.bind("<Escape>", lambda _event: window.destroy())
+        self._update_help()
+        self._apply_theme()
+        window.after_idle(self.help_text.focus_set)
+        return "break"
+
+    def _update_help(self):
+        index = self.notebook.index(self.notebook.select())
+        topic = TOOL_HELP[index]
+        self.help_window.title(f"Помощь — {topic.name}")
+        self.help_title.set(topic.name)
+        self._set_text(self.help_text, topic.text())
+
     def _theme_selected(self, _event=None):
         self.set_theme("night" if self.theme_label.get() == "Ночная" else "day")
 
@@ -646,6 +908,8 @@ class MacConverterApp:
             self.copy_ipv4()
         elif index == 3:
             self.copy_routes()
+        elif index == 5:
+            self.copy_password()
         else:
             table = self.mss_table if index == 2 else self.acl_table
             if all(value.get() != "—" for value in table.values.values()):
@@ -754,6 +1018,7 @@ class MacConverterApp:
             self.mtu_entry,
             self.route_entry,
             self.acl_entry,
+            self.password_length_entry,
         )[index]
         entry.focus_set()
         entry.selection_range(0, tk.END)
@@ -796,6 +1061,7 @@ class MacConverterApp:
     ) -> None:
         self.result.set("")
         self.copy_button.state(["disabled"])
+        self.clear_password()
         self.ipv4_calculation = None
         self.ipv4_binary.set("")
         for table in (

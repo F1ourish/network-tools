@@ -66,7 +66,7 @@ def main() -> int:
             "--title",
             f"Network Tools {version}",
             "--notes-file",
-            str(root / "docs/RELEASE_1_1_0.md"),
+            str(root / "docs" / f"RELEASE_{version.replace(chr(46), chr(95))}.md"),
             "--latest",
             *map(str, assets),
         ],

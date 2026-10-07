@@ -407,6 +407,7 @@ def run_ui_checks(binary: Path) -> tuple[list[str], list[dict]]:
                 for launch in range(2):
                     process = launch_unprivileged(isolated, str(application), environment)
                     hwnd = None
+                    password_test_started = False
                     try:
 
                         def appeared():
@@ -455,6 +456,9 @@ def run_ui_checks(binary: Path) -> tuple[list[str], list[dict]]:
                             checks.append(
                                 "Reopen: saved night theme; IPv4 defaults restored; entered addresses not persisted"
                             )
+                            keys(0x11, ord("6"))
+                            assert_invalid_copy()
+                            checks.append("Reopen: password is empty, not persisted")
                             continue
 
                         paste("0011.2233.aabb")
@@ -632,15 +636,120 @@ def run_ui_checks(binary: Path) -> tuple[list[str], list[dict]]:
                         checks.append(
                             "ACL: non-contiguous wildcard match, mismatch and invalid clear"
                         )
+                        # These are disposable test secrets; never print or capture them unmasked.
+                        keys(0x11, ord("6"))
+                        password_test_started = True
+                        assert_invalid_copy()
+                        focus_control(7)  # Length, symbols, four groups, exclusions, Generate.
+                        keys(0x20)
+                        write_clipboard("password copy sentinel")
+                        keys(0x11, 0x10, ord("C"))
+                        generated = wait_until(
+                            lambda: value
+                            if (value := read_clipboard()) and value != "password copy sentinel"
+                            else None
+                        )
+                        from mac_converter.passwords import PasswordOptions
+
+                        groups = PasswordOptions().groups()
+                        assert len(generated) == 20
+                        assert all(set(generated) & set(group) for group in groups)
+                        assert set(generated) <= set("".join(groups))
+                        save_screenshot(hwnd, Path("smoke-results/passwords-night.png"))
+                        checks.append(
+                            "Passwords: default length 20, required groups/exclusions, masked output and Copy"
+                        )
+                        focus_control(7)
+                        keys(0x20)
+                        write_clipboard("regenerate sentinel")
+                        keys(0x11, 0x10, ord("C"))
+                        second = wait_until(
+                            lambda: value
+                            if (value := read_clipboard()) and value != "regenerate sentinel"
+                            else None
+                        )
+                        assert len(second) == 20 and second != generated
+                        checks.append("Passwords: Generate again produces a fresh random result")
+                        # Wait for real app timer, pumping Windows messages for clipboard ownership.
+                        wait_until(lambda: read_clipboard() is None, timeout=40)
+                        checks.append(
+                            "Passwords: actual 30-second clipboard timer clears its own value"
+                        )
+                        paste("24")
+                        assert_invalid_copy()
+                        focus_control(7)
+                        keys(0x20)
+                        write_clipboard("length sentinel")
+                        keys(0x11, 0x10, ord("C"))
+                        resized = wait_until(
+                            lambda: value
+                            if (value := read_clipboard()) and value != "length sentinel"
+                            else None
+                        )
+                        assert len(resized) == 24
+                        write_clipboard("replacement clipboard content")
+                        checks.append(
+                            "Passwords: policy change clears old output; generation respects length 24"
+                        )
+                        # Clear must preserve the replacement content.
+                        focus_control(10)  # Length … Generate, result, Copy, Clear.
+                        keys(0x20)
+                        assert read_clipboard() == "replacement clipboard content"
+                        checks.append(
+                            "Passwords: Clear removes output and preserves another clipboard value"
+                        )
+                        paste("7")
+                        assert_invalid_copy()
+                        paste("20")
+                        checks.append("Passwords: invalid length disables copying and recovers")
+
+                        for tool, help_name in (
+                            (4, "Маршруты"),
+                            (5, "ACL wildcard"),
+                            (6, "Пароли"),
+                        ):
+                            keys(0x11, ord(str(tool)))
+                            keys(0x70)  # F1.
+                            help_hwnd = wait_until(
+                                lambda: find_window(isolated.resolve(), f"Помощь — {help_name}")
+                            )
+                            user32.SetForegroundWindow(help_hwnd)
+                            wait_until(lambda: user32.GetForegroundWindow() == help_hwnd)
+                            write_clipboard("help copy sentinel")
+                            keys(0x11, ord("A"))
+                            keys(0x11, ord("C"))
+                            help_text = wait_until(
+                                lambda: value
+                                if (value := read_clipboard()) and "Как использовать" in value
+                                else None
+                            )
+                            assert "Пример" in help_text and "Что учитывать" in help_text
+                            if tool == 4:
+                                assert "10.20.30.0/24" in help_text and "[LPM]" in help_text
+                            elif tool == 5:
+                                assert "permit/deny" in help_text and "0.0.255.254" in help_text
+                            save_screenshot(help_hwnd, Path(f"smoke-results/help-tool-{tool}.png"))
+                            keys(0x1B)  # Escape.
+                            wait_until(lambda: not user32.IsWindowVisible(help_hwnd))
+                            user32.SetForegroundWindow(hwnd)
+                            wait_until(lambda: user32.GetForegroundWindow() == hwnd)
+                        checks.append(
+                            "Context help: F1, route/ACL/password examples, readonly copy and Escape"
+                        )
                     except BaseException as error:
                         target = Path("smoke-results")
                         target.mkdir(exist_ok=True)
                         windows = describe_windows(isolated.resolve())
+                        if password_test_started:
+                            for window in windows:
+                                window["text"] = ["<redacted: password test>"]
                         diagnostic = {
                             "error": str(error),
                             "process_exit": process.poll(),
                             "windows": windows,
-                            "clipboard": read_clipboard(),
+                            "clipboard": "<redacted: password test>"
+                            if password_test_started
+                            else read_clipboard(),
                             "completed_checks": checks,
                             "execution_tokens": execution_tokens,
                         }

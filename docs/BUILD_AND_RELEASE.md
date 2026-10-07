@@ -4,7 +4,7 @@
 
 Выпуск проходит через тесты исходников, запуск готового EXE и проверку hashes.
 Публикуется точный source commit, для которого Windows job сформировал assets.
-Целевая версия — 1.1.0; статус конкретной проверки — VALIDATION_1_1_0.md.
+Целевая версия — 1.2.0; статус конкретной проверки — VALIDATION_1_1_0.md.
 
 ## Подготовка и сборка
 
@@ -38,7 +38,7 @@ Win32 smoke запускает EXE в новой папке с пробелам�
 | Файл | Назначение |
 | --- | --- |
 | dist/MacAddressConverter.exe | Standalone GUI x64 |
-| dist/NetworkTools-1.1.0-windows-x64.zip | EXE, инструкция, notices и verification report |
+| dist/NetworkTools-1.2.0-windows-x64.zip | EXE, инструкция, notices и verification report |
 | dist/RELEASE_VERIFICATION.json | Version, source commit, runner, dependencies, pytest summary, actual smoke checks |
 | dist/SHA256SUMS.txt | SHA-256 EXE, ZIP и verification JSON |
 | smoke-results/pytest.xml | Фактические результаты pytest |
@@ -51,7 +51,7 @@ ZIP и sums создаются только после successful smoke. Failed 
 
 ```powershell
 Get-FileHash .\dist\MacAddressConverter.exe -Algorithm SHA256
-Get-FileHash .\dist\NetworkTools-1.1.0-windows-x64.zip -Algorithm SHA256
+Get-FileHash .\dist\NetworkTools-1.2.0-windows-x64.zip -Algorithm SHA256
 Get-Content .\dist\SHA256SUMS.txt
 ```
 
@@ -75,7 +75,7 @@ Linux проверяет Ruff и все non-GUI tests. Windows обязател�
 | Artifact | Содержимое при распаковке |
 | --- | --- |
 | MacAddressConverter-windows-x64-<ref> | MacAddressConverter.exe в корне |
-| MacAddressConverter-portable-<ref> | NetworkTools-1.1.0-windows-x64.zip в корне |
+| MacAddressConverter-portable-<ref> | NetworkTools-1.2.0-windows-x64.zip в корне |
 | MacAddressConverter-verification-<ref> | dist/SHA256SUMS.txt, dist/RELEASE_VERIFICATION.json и smoke-results/ |
 
 Publisher скачивает первые два artifact в verified/dist, третий в verified.
@@ -112,3 +112,6 @@ settings.json. Не заменять опубликованные assets без 
 Источник ограничений: actual CI и код. Windows client acceptance, разные DPI,
 Defender/SmartScreen не покрываются hosted server CI. Onefile стартует с
 распаковкой TEMP; EXE без подписи, поведение корпоративных политик не проверено.
+
+Release notes выбираются автоматически: docs/RELEASE_<version с подчёркиваниями>.md.
+Пароли smoke-стенда не включаются в отчёты и screenshots.
