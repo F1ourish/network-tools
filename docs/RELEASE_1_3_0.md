@@ -22,9 +22,13 @@
 
 ### Проверка
 
-Перед публикацией CI проверяет расчёты, GUI и готовый EXE на Windows Server
-от стандартного пользователя. Фактические числа тестов, SHA-256 и исходный commit
-находятся в `RELEASE_VERIFICATION.json`. Процедура: `docs/BUILD_AND_RELEASE.md`.
+Кандидат прошёл **480 тестов без ошибок и пропусков** (398 без GUI, 82 GUI) и
+**44 проверки готового EXE** на Windows Server 2025 от стандартного пользователя.
+Проверены оба направления ACL, первый match/implicit deny, ошибки и неизвестный порт,
+все профили MTU, VLAN/PPPoE, вставка, русская раскладка и перезапуск.
+[Успешный CI](https://github.com/F1ourish/network-tools/actions/runs/37611845777); commit `2a1bfa0e5b67d28cf2f5ae1496d4ad177b9a24a6`.
+Перед публикацией CI повторяет проверки для точного commit релиза. SHA-256,
+исходный commit и среда - в `RELEASE_VERIFICATION.json`. Процедура: `docs/BUILD_AND_RELEASE.md`.
 
 ACL проверяет только введённые списки, без NAT, маршрутизации, stateful firewall
 и фрагментов. TCP-ответ моделируется с ACK=1. MTU пути не измеряется; параметры
