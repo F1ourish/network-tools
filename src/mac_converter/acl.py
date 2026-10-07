@@ -44,6 +44,24 @@ PORTS = {
     "non500-isakmp": 4500,
 }
 OPERATORS = {"eq", "neq", "lt", "gt", "range"}
+COUNTER = re.compile(r"\s+\(\s*[0-9]+\s+match(?:es)?\s*\)\s*$", re.I)
+
+
+def normalize_acl_paste(value: str) -> str:
+    """Clean display-only counters and indentation while preserving physical lines."""
+    lines = value.replace("\r\n", "\n").replace("\r", "\n").split("\n")
+    return "\n".join(COUNTER.sub("", line.strip()) for line in lines)
+
+
+class AclSyntaxError(InvalidNetworkInput):
+    def __init__(self, line, rule, detail, side=None):
+        self.line, self.rule, self.detail, self.side = line, rule, str(detail), side
+        sequence = re.match(r"([0-9]+)\s", rule)
+        label = f" (sequence {sequence[1]})" if sequence else ""
+        prefix = ("ACL запроса: ", "ACL ответа: ")[side] if side is not None else ""
+        super().__init__(f"{prefix}Строка {line}{label}: {detail}\nПравило: {rule[:300]}")
+
+
 ICMP_NAMES = {
     "echo",
     "echo-reply",
@@ -212,6 +230,13 @@ class _Tokens:
 
     def address(self, *, standard=False):
         word = self.take()
+        if word == "object-group":
+            name = self.words[self.position] if self.position < len(self.words) else "?"
+            raise InvalidNetworkInput(
+                f"object-group '{name}' требует раскрытия состава группы. "
+                f"Получить состав на Cisco: show object-group {name}. "
+                "В этой версии используйте отдельные правила с адресами группы."
+            )
         if word == "any":
             return AddressCondition()
         if word == "host":
@@ -255,7 +280,7 @@ def parse_acl(value: str) -> Acl:
         text = raw.strip()
         if not text or text.startswith(("!", "#")) or text.lower() in ("exit", "end"):
             continue
-        text = re.sub(r"\s+\([0-9]+ match(?:es)?\)\s*$", "", text, flags=re.I)
+        text = COUNTER.sub("", text)
         words = text.split()
         try:
             config = re.fullmatch(r"ip access-list (standard|extended) (\S+)", text, re.I)
@@ -357,11 +382,11 @@ def parse_acl(value: str) -> Acl:
                     established,
                     line,
                     sequence,
-                    raw.strip(),
+                    text,
                 )
             )
         except (InvalidNetworkInput, IndexError) as error:
-            raise InvalidNetworkInput(f"Строка {line}: {error}") from None
+            raise AclSyntaxError(line, text, error) from None
     if not rules:
         raise InvalidNetworkInput("Вставьте ACL с хотя бы одним правилом permit/deny.")
     if True in numbered:
@@ -393,12 +418,34 @@ def evaluate_acl(acl: Acl, flow: Flow) -> Decision:
     return Decision(False, None, "Неявный deny: ни одно правило не совпало.")
 
 
-def check_conversation(forward_value: str, reverse_value: str, flow: Flow) -> str:
-    forward_acl = parse_acl(forward_value)
-    reverse_acl = parse_acl(reverse_value) if reverse_value.strip() else None
-    request = evaluate_acl(forward_acl, flow)
+def check_conversation(
+    forward_value: str,
+    reverse_value: str,
+    flow: Flow,
+    *,
+    forward_absent=False,
+    reverse_absent=False,
+) -> str:
+    def parse_side(value, side):
+        try:
+            return parse_acl(value)
+        except AclSyntaxError as error:
+            raise AclSyntaxError(error.line, error.rule, error.detail, side) from None
+        except InvalidNetworkInput as error:
+            prefix = ("ACL запроса", "ACL ответа")[side]
+            raise InvalidNetworkInput(f"{prefix}: {error}") from None
+
+    forward_acl = None if forward_absent else parse_side(forward_value, 0)
+    reverse_acl = (
+        None if reverse_absent or not reverse_value.strip() else parse_side(reverse_value, 1)
+    )
+    request = (
+        Decision(True, None, "ACL запроса явно не назначена; этот фильтр не ограничивает запрос.")
+        if forward_absent
+        else evaluate_acl(forward_acl, flow)
+    )
     lines = [f"Запрос: {flow.text()}", request.text(), ""]
-    if reverse_acl is None:
+    if reverse_acl is None and not reverse_absent:
         lines.append("Ответ: ACL не задан, обратный поток не проверен.")
         lines.append(
             {
@@ -409,10 +456,16 @@ def check_conversation(forward_value: str, reverse_value: str, flow: Flow) -> st
         )
     else:
         reply = flow.reverse()
-        response = evaluate_acl(reverse_acl, reply)
+        response = (
+            Decision(True, None, "ACL ответа явно не назначена; этот фильтр не ограничивает ответ.")
+            if reverse_absent
+            else evaluate_acl(reverse_acl, reply)
+        )
         lines.extend([f"Ответ: {reply.text()}", response.text(), ""])
         if request.allowed is False or response.allowed is False:
             lines.append("Вывод: указанные ACL блокируют запрос или ответ.")
+        elif forward_absent and reverse_absent:
+            lines.append("Вывод: ACL в обоих направлениях не назначены.")
         elif request.allowed is True and response.allowed is True:
             lines.append("Вывод: запрос и ответ разрешены указанными ACL.")
         else:

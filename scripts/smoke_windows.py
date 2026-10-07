@@ -726,7 +726,7 @@ def run_ui_checks(binary: Path) -> tuple[list[str], list[dict]]:
                             "запрос и ответ разрешены", "198.51.100.20:443 -> 192.0.2.10:53000"
                         )
                         save_screenshot(hwnd, Path("smoke-results/acl-request-reply-night.png"))
-                        paste_control(8, "10 deny ip any any")
+                        paste_control(11, "10 deny ip any any")
                         blocked_reply = copy_tool(
                             "БЛОКИРУЕТСЯ: sequence 10, строка 1", "ACL блокируют"
                         )
@@ -736,22 +736,22 @@ def run_ui_checks(binary: Path) -> tuple[list[str], list[dict]]:
                         checks.append(
                             "ACL EXE: request/reply address and port reversal; reply deny identifies exact rule"
                         )
-                        paste_control(8, "")
-                        paste_control(6, "permit tcp any any eq 80")
+                        paste_control(11, "")
+                        paste_control(7, "permit tcp any any eq 80")
                         copy_tool("Неявный deny", "обратный поток не проверен")
                         checks.append("ACL EXE: implicit deny and empty reverse list are explicit")
-                        paste_control(6, "20 permit ip any any\n10 deny tcp any any eq 443")
+                        paste_control(7, "20 permit ip any any\n10 deny tcp any any eq 443")
                         copy_tool("БЛОКИРУЕТСЯ: sequence 10, строка 2")
-                        paste_control(6, "permit tcp any eq 53000 any eq 443\npermit ip any any")
+                        paste_control(7, "permit tcp any eq 53000 any eq 443\npermit ip any any")
                         paste_control(3, "")
                         copy_tool("НЕДОСТАТОЧНО ДАННЫХ", "Неизвестен порт источника")
                         checks.append(
                             "ACL EXE: sequence order and unknown source port do not produce false permit"
                         )
-                        paste_control(6, "permit ip any any\npermit tcp any any time-range DAY")
+                        paste_control(7, "permit ip any any\npermit tcp any any time-range DAY")
                         time.sleep(0.3)  # Allow the 180-ms editor debounce to finish.
                         assert_invalid_copy()
-                        paste_control(6, "permit ip any any")
+                        paste_control(7, "permit ip any any")
                         copy_tool("запрос разрешён", "обратный поток не проверен")
                         paste("bad")
                         assert_invalid_copy()
@@ -759,6 +759,61 @@ def run_ui_checks(binary: Path) -> tuple[list[str], list[dict]]:
                         copy_tool("запрос разрешён")
                         checks.append(
                             "ACL EXE: unsupported conditions and invalid flow clear stale output and recover"
+                        )
+                        paste_control(
+                            7,
+                            "  10 permit ip any any (845 matches)  \n 20 deny ip any any (1 match) ",
+                        )
+                        clean_report = copy_tool(
+                            "РАЗРЕШЁН: sequence 10, строка 1", "\n  10 permit ip any any\n"
+                        )
+                        assert "matches" not in clean_report and "(1 match)" not in clean_report
+                        checks.append(
+                            "ACL EXE: Ctrl+V trims each line and removes Cisco match counters"
+                        )
+                        focus_control(9)  # Interface selector, request editor, Paste, Expand.
+                        keys(0x20)
+                        expanded = wait_until(
+                            lambda: find_window(isolated.resolve(), "ACL запроса - Network Tools")
+                        )
+                        user32.SetForegroundWindow(expanded)
+                        keys(0x11, ord("A"))
+                        write_clipboard("  10 permit ip any any (2 matches)  ")
+                        keys(0x11, ord("V"))
+                        time.sleep(0.3)
+                        save_screenshot(expanded, Path("smoke-results/acl-expanded-night.png"))
+                        keys(0x1B)
+                        wait_until(
+                            lambda: not find_window(
+                                isolated.resolve(), "ACL запроса - Network Tools"
+                            )
+                        )
+                        user32.SetForegroundWindow(hwnd)
+                        copy_tool("РАЗРЕШЁН: sequence 10, строка 1", "\n  10 permit ip any any\n")
+                        checks.append(
+                            "ACL EXE: large editor opens, accepts clean paste and keeps edits on Escape"
+                        )
+                        paste_control(7, "200 permit udp object-group CONFERENCE_NET eq 8801 any")
+                        time.sleep(0.3)
+                        assert_invalid_copy()
+                        focus_control(10)
+                        keys(0x20)
+                        copy_tool("ACL запроса явно не назначена", "обратный поток не проверен")
+                        focus_control(10)
+                        keys(0x20)
+                        time.sleep(0.3)
+                        assert_invalid_copy()
+                        paste_control(7, "permit ip any any")
+                        paste_control(11, "deny ip any any")
+                        copy_tool("ACL блокируют")
+                        focus_control(14)
+                        keys(0x20)
+                        copy_tool("запрос и ответ разрешены", "ACL ответа явно не назначена")
+                        focus_control(14)
+                        keys(0x20)
+                        copy_tool("ACL блокируют", "\n  deny ip any any\n")
+                        checks.append(
+                            "ACL EXE: absent-direction flags retain lists, skip only that ACL and restore its decision"
                         )
                         # These are disposable test secrets; never print or capture them unmasked.
                         keys(0x11, ord("6"))

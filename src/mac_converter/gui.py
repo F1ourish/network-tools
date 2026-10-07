@@ -9,7 +9,8 @@ from types import TracebackType
 import ttkbootstrap as ttk
 
 from . import __version__
-from .acl import check_conversation, make_flow
+from .acl import AclSyntaxError, check_conversation, make_flow, normalize_acl_paste
+from .acl_editor import AclEditor, AutoScrollbar
 from .clipboard import ClipboardUnavailable, clear_if_matches
 from .help_content import TOOL_HELP
 from .mac import InvalidMacAddress, format_mac
@@ -97,6 +98,7 @@ class MacConverterApp:
         self._copied_password = None
         self._clipboard_retries = 0
         self._acl_job = None
+        self._acl_editor_windows = {}
         self.mtu_calculation = None
         self.status = tk.StringVar(root, value="Ready")
 
@@ -137,7 +139,9 @@ class MacConverterApp:
             viewport.rowconfigure(0, weight=1)
             canvas = tk.Canvas(viewport, highlightthickness=0, borderwidth=0, takefocus=False)
             canvas.grid(row=0, column=0, sticky="nsew")
-            scrollbar = ttk.Scrollbar(viewport, orient="vertical", command=canvas.yview)
+            scrollbar = AutoScrollbar(
+                viewport, orient="vertical", command=canvas.yview, takefocus=False
+            )
             scrollbar.grid(row=0, column=1, sticky="ns")
             canvas.configure(yscrollcommand=scrollbar.set)
             page = ttk.Frame(canvas, padding=16)
@@ -254,6 +258,8 @@ class MacConverterApp:
         except tk.TclError:
             self.status.set("В буфере нет доступного текста. Попробуйте вставить ещё раз.")
             return "break"
+        if getattr(widget, "acl_normalize", False):
+            value = normalize_acl_paste(value)
         if not isinstance(widget, tk.Text):
             value = value.strip()
             if "\n" in value or "\r" in value:
@@ -633,7 +639,7 @@ class MacConverterApp:
             container, height=height, width=50, wrap="word", font=self.fixed_font, takefocus=True
         )
         text.grid(row=0, column=0, sticky="nsew")
-        scrollbar = ttk.Scrollbar(container, orient="vertical", command=text.yview)
+        scrollbar = AutoScrollbar(container, orient="vertical", command=text.yview, takefocus=False)
         scrollbar.grid(row=0, column=1, sticky="ns")
         text.configure(yscrollcommand=scrollbar.set)
         self._bind_selection(text)
@@ -707,6 +713,9 @@ class MacConverterApp:
         self.acl_ack = tk.BooleanVar(self.root, value=False)
         self.acl_flow_error = tk.StringVar(self.root)
         self.acl_conclusion = tk.StringVar(self.root)
+        self.acl_absent = [tk.BooleanVar(self.root, value=False) for _ in range(2)]
+        self.acl_interface = tk.StringVar(self.root, value="Со стороны источника")
+        self.acl_direction_labels = [tk.StringVar(self.root) for _ in range(2)]
         inputs = ttk.Frame(page)
         inputs.grid(row=0, column=0, sticky="ew")
         for column in range(3):
@@ -746,28 +755,57 @@ class MacConverterApp:
             wraplength=780,
             bootstyle="secondary",
         ).grid(row=1, column=0, sticky="ew")
+        interface = ttk.Frame(summary)
+        interface.grid(row=2, column=0, sticky="ew", pady=(6, 0))
+        ttk.Label(interface, text="Интерфейс Cisco:").pack(side="left", padx=(0, 8))
+        self.acl_interface_entry = ttk.Combobox(
+            interface,
+            textvariable=self.acl_interface,
+            values=("Со стороны источника", "Со стороны назначения"),
+            state="readonly",
+            width=27,
+        )
+        self.acl_interface_entry.pack(side="left")
         lists = ttk.Frame(page)
         lists.grid(row=3, column=0, sticky="ew")
         self.acl_inputs = []
-        for column, label in enumerate(("ACL запроса", "ACL ответа (необязательно)")):
+        self.acl_editors = []
+        self.acl_expand_buttons = []
+        self.acl_absent_buttons = []
+        for column in range(2):
             lists.columnconfigure(column, weight=1, uniform="acllists")
             frame = ttk.Frame(lists)
             frame.grid(row=0, column=column, sticky="nsew", padx=(0, 8) if column == 0 else (8, 0))
             frame.columnconfigure(0, weight=1)
-            ttk.Label(frame, text=label).grid(row=0, column=0, sticky="w")
-            container, widget = self._text_widget(frame, height=7)
-            container.grid(row=1, column=0, sticky="nsew", pady=(6, 0))
-            widget.configure(width=30, wrap="none")
-            horizontal = ttk.Scrollbar(frame, orient="horizontal", command=widget.xview)
-            horizontal.grid(row=2, column=0, sticky="ew")
-            widget.configure(xscrollcommand=horizontal.set)
+            ttk.Label(frame, textvariable=self.acl_direction_labels[column], wraplength=340).grid(
+                row=0, column=0, sticky="w"
+            )
+            editor = AclEditor(
+                self, frame, changed=lambda e, index=column: self._acl_editor_changed(e, index)
+            )
+            editor.grid(row=1, column=0, sticky="nsew", pady=(6, 0))
+            widget = editor.text
+            self.acl_editors.append(editor)
+            buttons = ttk.Frame(frame)
+            buttons.grid(row=3, column=0, sticky="ew", pady=(6, 0))
             button = ttk.Button(
-                frame,
+                buttons,
                 text="Вставить ACL",
                 command=lambda entry=widget: self._paste(entry, replace=True),
             )
-            button.grid(row=3, column=0, sticky="w", pady=(6, 0))
+            button.pack(side="left")
             widget.paste_button = button
+            expand = ttk.Button(
+                buttons, text="Развернуть", command=lambda index=column: self.open_acl_editor(index)
+            )
+            expand.pack(side="left", padx=(6, 0))
+            self.acl_expand_buttons.append(expand)
+            absent = ttk.Checkbutton(
+                frame, text="ACL в этом направлении не назначена", variable=self.acl_absent[column]
+            )
+            absent.grid(row=4, column=0, sticky="w", pady=(5, 0))
+            self.acl_absent_buttons.append(absent)
+            widget.bind("<Control-Return>", lambda _e, index=column: self.open_acl_editor(index))
             self.acl_inputs.append(widget)
         self.acl_forward_input, self.acl_reverse_input = self.acl_inputs
         actions = ttk.Frame(page)
@@ -832,11 +870,93 @@ class MacConverterApp:
             self.acl_source_port,
             self.acl_destination_port,
             self.acl_ack,
+            *self.acl_absent,
         ):
             variable.trace_add("write", self._acl_flow_update)
         for widget in self.acl_inputs:
             widget.edit_modified(False)
-            widget.bind("<<Modified>>", self._acl_modified)
+        self.acl_interface.trace_add("write", self._acl_direction_update)
+        self._acl_direction_update()
+
+    def _acl_direction_update(self, *_args):
+        origin = self.acl_interface.get() == "Со стороны источника"
+        directions = ("in", "out") if origin else ("out", "in")
+        for index, direction in enumerate(directions):
+            title = ("ACL запроса", "ACL ответа")[index]
+            motion = (
+                "Пакет входит в устройство с этого интерфейса."
+                if direction == "in"
+                else "Пакет выходит из устройства через этот интерфейс."
+            )
+            self.acl_direction_labels[index].set(
+                f"{title}: ip access-group <name> {direction}\n{motion}"
+            )
+
+    def _acl_editor_changed(self, event, index):
+        value = event.widget.get("1.0", "end-1c")
+        editors = [self.acl_editors[index]]
+        if index in self._acl_editor_windows:
+            editors.append(self._acl_editor_windows[index][1])
+        for editor in editors:
+            if editor.text is not event.widget:
+                editor.set_text(value)
+        self._acl_modified(event)
+
+    def _set_acl_text(self, index, value):
+        self.acl_editors[index].set_text(value)
+        if index in self._acl_editor_windows:
+            self._acl_editor_windows[index][1].set_text(value)
+
+    def open_acl_editor(self, index):
+        if index in self._acl_editor_windows:
+            self._acl_editor_windows[index][0].lift()
+            return "break"
+        window = tk.Toplevel(self.root)
+        window.title(("ACL запроса", "ACL ответа")[index] + " - Network Tools")
+        window.transient(self.root)
+        window.geometry(
+            f"{max(700, self.root.winfo_screenwidth() - 60)}x{max(500, self.root.winfo_screenheight() - 100)}+20+20"
+        )
+        window.minsize(600, 400)
+        window.columnconfigure(0, weight=1)
+        window.rowconfigure(1, weight=1)
+        ttk.Label(window, textvariable=self.acl_direction_labels[index], padding=12).grid(
+            row=0, column=0, sticky="ew"
+        )
+        editor = AclEditor(
+            self, window, height=24, changed=lambda e: self._acl_editor_changed(e, index)
+        )
+        editor.grid(row=1, column=0, sticky="nsew", padx=12)
+        editor.set_text(self.acl_inputs[index].get("1.0", "end-1c"))
+        self._acl_editor_windows[index] = (window, editor)
+        controls = ttk.Frame(window, padding=12)
+        controls.grid(row=2, column=0, sticky="ew")
+        ttk.Button(
+            controls, text="Вставить ACL", command=lambda: self._paste(editor.text, replace=True)
+        ).pack(side="left")
+        ttk.Checkbutton(controls, text="ACL не назначена", variable=self.acl_absent[index]).pack(
+            side="left", padx=12
+        )
+
+        def close(_event=None):
+            self.acl_editors[index].set_text(editor.text.get("1.0", "end-1c"))
+            del self._acl_editor_windows[index]
+            window.destroy()
+            self._acl_flow_update()
+            self.acl_inputs[index].focus_set()
+            return "break"
+
+        ttk.Button(controls, text="Вернуться", command=close).pack(side="right")
+        window.protocol("WM_DELETE_WINDOW", close)
+        window.bind("<Escape>", close)
+        try:
+            window.state("zoomed")
+        except tk.TclError:
+            pass
+        self._apply_theme()
+        editor.text.focus_set()
+        self._acl_flow_update()
+        return "break"
 
     def _toggle_wildcard(self):
         if self.acl_wildcard_visible.get():
@@ -851,20 +971,19 @@ class MacConverterApp:
         self.acl_source_port.set("53000")
         self.acl_destination_port.set("443")
         self.acl_ack.set(False)
+        for absent in self.acl_absent:
+            absent.set(False)
         examples = (
             "ip access-list extended REQUEST\n10 permit tcp host 192.0.2.10 host 198.51.100.20 eq https\n20 deny ip any any log",
             "ip access-list extended REPLY\n10 permit tcp host 198.51.100.20 eq https host 192.0.2.10 range 1024 65535 established\n20 deny ip any any log",
         )
-        for widget, text in zip(self.acl_inputs, examples, strict=True):
-            widget.delete("1.0", tk.END)
-            widget.insert("1.0", text)
-            widget.edit_modified(False)
+        for index, text in enumerate(examples):
+            self._set_acl_text(index, text)
         self._acl_flow_update()
 
     def _acl_clear(self):
-        for widget in self.acl_inputs:
-            widget.delete("1.0", tk.END)
-            widget.edit_modified(False)
+        for index in range(2):
+            self._set_acl_text(index, "")
         self._acl_flow_update()
 
     def _acl_modified(self, event):
@@ -884,6 +1003,10 @@ class MacConverterApp:
             self.root.after_cancel(self._acl_job)
             self._acl_job = None
         self.acl_ack_button.state(["!disabled" if self.acl_protocol.get() == "TCP" else "disabled"])
+        for editor in self.acl_editors:
+            editor.show_error()
+        for _window, editor in self._acl_editor_windows.values():
+            editor.show_error()
         try:
             flow = make_flow(
                 self.acl_source.get(),
@@ -897,8 +1020,14 @@ class MacConverterApp:
                 self.acl_forward_input.get("1.0", "end-1c"),
                 self.acl_reverse_input.get("1.0", "end-1c"),
                 flow,
+                forward_absent=self.acl_absent[0].get(),
+                reverse_absent=self.acl_absent[1].get(),
             )
         except InvalidNetworkInput as error:
+            if isinstance(error, AclSyntaxError) and error.side is not None:
+                self.acl_editors[error.side].show_error(error.line)
+                if error.side in self._acl_editor_windows:
+                    self._acl_editor_windows[error.side][1].show_error(error.line)
             self.acl_flow_error.set(str(error))
             self.acl_conclusion.set("Проверка недоступна: исправьте входные данные.")
             self._set_text(self.acl_output, "")

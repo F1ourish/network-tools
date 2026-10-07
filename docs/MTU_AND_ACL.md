@@ -1,4 +1,4 @@
-# MTU и ACL в 1.3.0
+# MTU и ACL в 1.4.0
 
 ## MTU
 
@@ -71,6 +71,23 @@ Object-group, time-range, fragments и прочие неизвестные ус�
 Пустая вторая ACL означает, что ответ не проверен. established проверяет ACK/RST,
 а не соединение. NAT, маршрутизация, stateful firewall и фрагменты не моделируются.
 
+Флажок отсутствия ACL явно подтверждает, что в направлении фильтр не назначен:
+список сохраняется, но не разбирается. Это отличается от пустого непроверенного
+ответного списка. in/out относится к движению через выбранный интерфейс Cisco:
+
+| Интерфейс | Запрос | Ответ |
+| --- | --- | --- |
+| Со стороны источника | ip access-group <name> in | ip access-group <name> out |
+| Со стороны назначения | ip access-group <name> out | ip access-group <name> in |
+
+Номера слева - физические строки вставленного текста, sequence - номера правил.
+Вставка убирает пробелы по краям и Cisco counters, оставляя пустые строки.
+Object-group не является IPv4-адресом: сообщение показывает группу и команду
+`show object-group <name>`. Список ACL сам по себе не содержит её участников.
+В 1.4.0 группа должна быть развёрнута в отдельные правила адресов; полный разбор
+object-group не реализован. Неподдерживаемое правило никогда не пропускается молча.
+
 Источники: [ACK/RST](https://www.cisco.com/c/en/us/support/docs/ip/access-lists/26448-ACLsamples.html),
 [sequence number](https://www.cisco.com/c/en/us/td/docs/ios-xml/ios/sec_data_acl/configuration/xe-3e/sec-data-acl-xe-3e-book/sec-acl-seq-num.html),
-[Cisco IOS access lists](https://www.cisco.com/c/en/us/support/docs/security/ios-firewall/23602-confaccesslists.html).
+[Cisco IOS access lists](https://www.cisco.com/c/en/us/support/docs/security/ios-firewall/23602-confaccesslists.html),
+[Catalyst IOS XE: object-group, show object-group и ip access-group in/out](https://www.cisco.com/c/en/us/td/docs/switches/lan/catalyst9500/software/release/17-13/configuration_guide/sec/b_1713_sec_9500_cg/object_groups_for_acls.html).

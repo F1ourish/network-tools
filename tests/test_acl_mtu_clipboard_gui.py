@@ -248,9 +248,10 @@ def test_tab_traverses_acl_editors_without_inserting_text(app):
     app.root.update()
     assert app.root.focus_get() == app.acl_forward_input.paste_button
     assert app.acl_forward_input.get("1.0", "end-1c") == original
-    app.root.focus_get().event_generate("<Tab>")
-    app.root.update()
-    assert app.root.focus_get() == app.acl_reverse_input
+    for expected in (app.acl_expand_buttons[0], app.acl_absent_buttons[0], app.acl_reverse_input):
+        app.root.focus_get().event_generate("<Tab>")
+        app.root.update()
+        assert app.root.focus_get() == expected
     app.acl_reverse_input.event_generate("<Shift-Tab>")
     app.root.update()
-    assert app.root.focus_get() == app.acl_forward_input.paste_button
+    assert app.root.focus_get() == app.acl_absent_buttons[0]
