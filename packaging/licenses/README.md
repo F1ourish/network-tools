@@ -1,10 +1,10 @@
 # Original license texts
 
-`TCL-LICENSE.txt` — исходный текст из официального репозитория Tcl,
+`TCL-LICENSE.txt` - исходный текст из официального репозитория Tcl,
 tag `core-8-6-15`:
 https://raw.githubusercontent.com/tcltk/tcl/core-8-6-15/license.terms
 
-`PYTHON-LICENSE.txt` — оригинальный `LICENSE.txt` из `exe.msi` официального
+`PYTHON-LICENSE.txt` - оригинальный `LICENSE.txt` из `exe.msi` официального
 Windows installer CPython 3.12.10:
 https://www.python.org/ftp/python/3.12.10/python-3.12.10-amd64.exe
 

@@ -352,12 +352,14 @@ class MacConverterApp:
         frame = ttk.Frame(parent)
         frame.grid(row=0, column=column, sticky="ew", padx=(0, 12) if column == 0 else (0, 0))
         frame.columnconfigure(0, weight=1)
-        ttk.Label(frame, text=label).grid(row=0, column=0, sticky="w", pady=(0, 7))
+        ttk.Label(frame, text=label, wraplength=220).grid(
+            row=0, column=0, columnspan=2, sticky="w", pady=(0, 7)
+        )
         if values is None:
-            entry = ttk.Entry(frame, textvariable=variable, font=self.fixed_font)
+            entry = ttk.Entry(frame, textvariable=variable, font=self.fixed_font, width=14)
         else:
             entry = ttk.Combobox(
-                frame, textvariable=variable, values=values, font=self.fixed_font, width=24
+                frame, textvariable=variable, values=values, font=self.fixed_font, width=16
             )
         entry.grid(row=1, column=0, sticky="ew")
         self._bind_selection(entry)

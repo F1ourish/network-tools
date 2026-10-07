@@ -1,6 +1,6 @@
-# Third-party notices — Network Tools 1.1.0
+# Third-party notices - Network Tools
 
-Код приложения — MIT. Лицензии bundled runtime сохраняются отдельно и не
+Код приложения - MIT. Лицензии bundled runtime сохраняются отдельно и не
 заменяются лицензией приложения. Оригинальные файлы входят в EXE и ZIP.
 
 | Компонент | Версия / источник notice в Windows build |

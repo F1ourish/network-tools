@@ -203,3 +203,36 @@ def test_windows_physical_ctrl_v_works_with_non_latin_keysym(app):
     event = SimpleNamespace(widget=app.input_entry, state=4, keycode=86, keysym="Cyrillic_em")
     assert app._clipboard_key(event) == "break"
     assert app.input_value.get() == "00112233aabb"
+
+
+def test_acl_and_mtu_input_controls_fit_minimum_window_width(app):
+    app.root.geometry("820x610")
+    for index, controls in (
+        (
+            4,
+            (
+                app.acl_entry,
+                app.acl_destination_entry,
+                app.acl_protocol_entry,
+                app.acl_source_port_entry,
+                app.acl_destination_port_entry,
+            ),
+        ),
+        (
+            2,
+            (
+                app.mtu_entry,
+                app.version_entry,
+                app.overhead_entry,
+                app.mtu_controls["Что измерено"],
+                app.mtu_controls["Инкапсуляция"],
+            ),
+        ),
+    ):
+        app.select_tool(index)
+        app.root.update()
+        canvas = app._canvases[index]
+        right = canvas.winfo_rootx() + canvas.winfo_width()
+        for control in controls:
+            assert control.winfo_rootx() >= canvas.winfo_rootx()
+            assert control.winfo_rootx() + control.winfo_width() <= right

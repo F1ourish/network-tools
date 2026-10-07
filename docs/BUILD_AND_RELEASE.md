@@ -88,7 +88,7 @@ assets, версию, source commit, successful smoke и hash проверенн
 `gh release create` создаёт v<version> для точного github.sha и прикладывает
 четыре assets. Existing release/tag не перезаписывается; при занятой версии
 устранить причину и выпустить новую версию. Тег при отдельном tag build должен
-совпадать с __version__. Текст release notes хранится в docs/RELEASE_1_1_0.md.
+совпадать с __version__. Publisher выбирает docs/RELEASE_<версия>.md; для 1.3.0 - docs/RELEASE_1_3_0.md.
 
 После выпуска проверить страницу Release, target commit, имена и hashes assets.
 GitHub artifact имеет retention; Release assets являются основной поставкой.
