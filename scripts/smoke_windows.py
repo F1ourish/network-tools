@@ -711,7 +711,12 @@ def run_ui_checks(binary: Path) -> tuple[list[str], list[dict]]:
                         )
                         save_screenshot(hwnd, Path("smoke-results/acl-request-reply-night.png"))
                         paste_control(8, "10 deny ip any any")
-                        copy_tool("БЛОКИРУЕТСЯ: sequence 10, строка 1", "ACL блокируют")
+                        blocked_reply = copy_tool(
+                            "БЛОКИРУЕТСЯ: sequence 10, строка 1", "ACL блокируют"
+                        )
+                        request_part, reply_part = blocked_reply.split("Ответ: ", 1)
+                        assert "РАЗРЕШЁН: sequence 10, строка 2" in request_part
+                        assert "БЛОКИРУЕТСЯ: sequence 10, строка 1" in reply_part
                         checks.append(
                             "ACL EXE: request/reply address and port reversal; reply deny identifies exact rule"
                         )

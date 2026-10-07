@@ -236,3 +236,21 @@ def test_acl_and_mtu_input_controls_fit_minimum_window_width(app):
         for control in controls:
             assert control.winfo_rootx() >= canvas.winfo_rootx()
             assert control.winfo_rootx() + control.winfo_width() <= right
+
+
+def test_tab_traverses_acl_editors_without_inserting_text(app):
+    app.select_tool(4)
+    app.root.update()
+    original = app.acl_forward_input.get("1.0", "end-1c")
+    app.acl_forward_input.focus_force()
+    app.root.update()
+    app.acl_forward_input.event_generate("<Tab>")
+    app.root.update()
+    assert app.root.focus_get() == app.acl_forward_input.paste_button
+    assert app.acl_forward_input.get("1.0", "end-1c") == original
+    app.root.focus_get().event_generate("<Tab>")
+    app.root.update()
+    assert app.root.focus_get() == app.acl_reverse_input
+    app.acl_reverse_input.event_generate("<Shift-Tab>")
+    app.root.update()
+    assert app.root.focus_get() == app.acl_forward_input.paste_button

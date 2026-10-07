@@ -637,10 +637,19 @@ class MacConverterApp:
         scrollbar.grid(row=0, column=1, sticky="ns")
         text.configure(yscrollcommand=scrollbar.set)
         self._bind_selection(text)
+        text.bind("<Tab>", self._traverse_text)
+        text.bind("<Shift-Tab>", lambda event: self._traverse_text(event, backwards=True))
+        text.bind("<ISO_Left_Tab>", lambda event: self._traverse_text(event, backwards=True))
         if readonly:
             text.configure(state="disabled")
         self._plain_text_widgets.append(text)
         return container, text
+
+    @staticmethod
+    def _traverse_text(event, *, backwards=False):
+        target = event.widget.tk_focusPrev() if backwards else event.widget.tk_focusNext()
+        target.focus_set()
+        return "break"
 
     def _build_routes(self, page):
         page.rowconfigure(2, weight=1)
