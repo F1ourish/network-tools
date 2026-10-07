@@ -105,7 +105,7 @@ manifest `asInvoker`, bundled Python/Tcl/Tk и лицензии.
 - SHA-256 EXE: `b3361751cb446e50a352ebfe9de91a30ed9f2b47f4dae088c65531b12287993a`.
 - [Проверенный artifact](https://github.com/F1ourish/mac-address-converter/actions/runs/37349926876/artifacts/11362132391), ID `11362132391`.
 - Artifact CI ZIP SHA-256: `b8014e8d624da079de95dc668513303c283eacd8f138c871933e511c780b7f27`.
-- Создан 05.10.2026, срок хранения CI artifact — до 04.11.2026.
+- Создан 05.10.2026, срок хранения CI artifact - до 04.11.2026.
 
 Artifact содержит EXE, SHA256SUMS, `windows-exe.json` и настоящий PNG рабочего EXE.
 Скачанный ZIP проверен по digest GitHub и CRC; SHA-256 EXE совпал с SHA256SUMS
@@ -162,7 +162,7 @@ venv, IDE или доступа к установленному builder interpre
 
 ## Ограничения и оставшаяся проверка
 
-- Windows 10/11 x64 — целевая среда; непосредственно проверен Windows Server 2025.
+- Windows 10/11 x64 - целевая среда; непосредственно проверен Windows Server 2025.
 - Не проведён тест на чистой Windows 10/11 без установленного Python.
 - Не проверены масштабы 100%, 125%, 150%, локали и клиентские Windows themes.
 - Поведение Defender, SmartScreen и корпоративных политик не проверено; code signing нет.

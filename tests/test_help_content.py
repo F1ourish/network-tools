@@ -8,7 +8,7 @@ def test_help_covers_all_tools_and_promises_no_full_route_acl_simulation():
         "IPv4",
         "MTU / MSS",
         "Маршруты",
-        "ACL wildcard",
+        "ACL",
         "Пароли",
     ]
     assert all(

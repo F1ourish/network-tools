@@ -9,6 +9,7 @@ from types import TracebackType
 import ttkbootstrap as ttk
 
 from . import __version__
+from .acl import check_conversation, make_flow
 from .clipboard import ClipboardUnavailable, clear_if_matches
 from .help_content import TOOL_HELP
 from .mac import InvalidMacAddress, format_mac
@@ -23,11 +24,11 @@ from .network import (
     InvalidNetworkInput,
     IPv4Calculation,
     calculate_ipv4,
-    calculate_mss,
     check_wildcard,
     host_page,
     lookup_routes,
 )
+from .mtu import BASES, CIPHERS, PROFILES, MtuOptions, calculate_mtu
 from .settings import ThemeSettings
 
 
@@ -37,7 +38,7 @@ class OutputTable:
         self.frame.columnconfigure(1, weight=1)
         self.values, self.entries, self.buttons = {}, {}, {}
         for row, label in enumerate(labels):
-            value = tk.StringVar(app.root, value="—")
+            value = tk.StringVar(app.root, value="-")
             self.values[label] = value
             ttk.Label(self.frame, text=label, wraplength=145).grid(
                 row=row, column=0, sticky="w", padx=(0, 10), pady=4
@@ -60,19 +61,19 @@ class OutputTable:
 
     def update(self, rows):
         for label, variable in self.values.items():
-            variable.set(rows.get(label, "—"))
-            self.buttons[label].state(["!disabled" if variable.get() != "—" else "disabled"])
+            variable.set(rows.get(label, "-"))
+            self.buttons[label].state(["!disabled" if variable.get() != "-" else "disabled"])
 
     def clear(self):
         for label, variable in self.values.items():
-            variable.set("—")
+            variable.set("-")
             self.buttons[label].state(["disabled"])
 
 
 class MacConverterApp:
     def __init__(self, root: tk.Misc, *, settings_path: Path | None = None) -> None:
         self.root = root
-        root.title(f"MAC Address Converter {__version__} — Network Tools")
+        root.title(f"MAC Address Converter {__version__} - Network Tools")
         root.resizable(True, True)
         root.report_callback_exception = self._report_callback_error
         self.settings = ThemeSettings(settings_path)
@@ -95,6 +96,8 @@ class MacConverterApp:
         self._clipboard_job = None
         self._copied_password = None
         self._clipboard_retries = 0
+        self._acl_job = None
+        self.mtu_calculation = None
         self.status = tk.StringVar(root, value="Ready")
 
         shell = ttk.Frame(root, padding=(20, 16))
@@ -182,6 +185,7 @@ class MacConverterApp:
         root.bind("<Control-Shift-C>", self.copy_current_tool)
         root.bind("<Control-Shift-t>", self.toggle_theme)
         root.bind("<Control-Shift-T>", self.toggle_theme)
+        root.bind("<Control-KeyPress>", self._tool_key)
         root.bind("<MouseWheel>", self._scroll_tool)
         root.bind("<FocusIn>", self._show_focused_field)
         self._apply_theme()
@@ -189,6 +193,7 @@ class MacConverterApp:
         self._mss_update()
         self._routes_update()
         self._acl_update()
+        self._acl_flow_update()
         self.status.set("Ready")
         root.minsize(820, 610)
         width = max(820, min(940, root.winfo_screenwidth() - 80))
@@ -201,6 +206,139 @@ class MacConverterApp:
     def _bind_selection(self, widget):
         widget.bind("<Control-a>", self._select_all)
         widget.bind("<Control-A>", self._select_all)
+        widget.bind("<<Paste>>", lambda event: self._paste(event.widget))
+        widget.bind("<<Copy>>", lambda event: self._copy_selection(event.widget))
+        widget.bind("<<Cut>>", lambda event: self._cut_selection(event.widget))
+        widget.bind("<Control-KeyPress>", self._clipboard_key)
+        widget.bind("<Button-3>", self._clipboard_menu)
+        widget.bind("<Shift-F10>", self._clipboard_menu)
+
+    @staticmethod
+    def _editable(widget):
+        return str(widget.cget("state")) == "normal"
+
+    def _clipboard_key(self, event):
+        if event.state & 1:  # Keep Ctrl+Shift+C for the complete tool report.
+            return None
+        if self.root.tk.call("tk", "windowingsystem") == "win32":
+            key = {65: "a", 67: "c", 86: "v", 88: "x"}.get(event.keycode)
+        else:
+            key = event.keysym.lower()
+        if key == "a":
+            return self._select_all(event)
+        action = {"c": "<<Copy>>", "v": "<<Paste>>", "x": "<<Cut>>"}.get(key)
+        if action:
+            event.widget.event_generate(action)
+            return "break"
+        return None
+
+    def _tool_key(self, event):
+        if self.root.tk.call("tk", "windowingsystem") != "win32":
+            return None
+        if event.state & 1:
+            if event.keycode == 67:
+                return self.copy_current_tool(event)
+            if event.keycode == 84:
+                return self.toggle_theme(event)
+        elif event.keycode == 76:
+            return self.focus_input(event)
+        elif 49 <= event.keycode <= 54:
+            return self.select_tool(event.keycode - 49)
+        return None
+
+    def _paste(self, widget, *, replace=False):
+        if not self._editable(widget):
+            return "break"
+        try:
+            value = self.root.clipboard_get()
+        except tk.TclError:
+            self.status.set("В буфере нет доступного текста. Попробуйте вставить ещё раз.")
+            return "break"
+        if not isinstance(widget, tk.Text):
+            value = value.strip()
+            if "\n" in value or "\r" in value:
+                self.status.set("Для этого поля вставьте одну строку.")
+                return "break"
+        if widget is getattr(self, "ipv4_entry", None) and "/" in value:
+            try:
+                result = calculate_ipv4(value)
+            except InvalidNetworkInput:
+                pass
+            else:
+                self._syncing_ipv4 = True
+                self.ipv4_address.set(str(result.address))
+                self.ipv4_mask.set(f"/{result.network.prefixlen}")
+                self._syncing_ipv4 = False
+                self._ipv4_update()
+                return "break"
+        if isinstance(widget, tk.Text):
+            if replace:
+                widget.delete("1.0", tk.END)
+            elif widget.tag_ranges(tk.SEL):
+                widget.delete(tk.SEL_FIRST, tk.SEL_LAST)
+            widget.insert(tk.INSERT, value)
+        else:
+            if replace:
+                widget.delete(0, tk.END)
+            elif widget.selection_present():
+                start = widget.index(tk.SEL_FIRST)
+                widget.delete(tk.SEL_FIRST, tk.SEL_LAST)
+                widget.icursor(start)
+            widget.insert(tk.INSERT, value)
+        return "break"
+
+    @staticmethod
+    def _selection(widget):
+        try:
+            if isinstance(widget, tk.Text):
+                return widget.get(tk.SEL_FIRST, tk.SEL_LAST)
+            return widget.get()[widget.index(tk.SEL_FIRST):widget.index(tk.SEL_LAST)]
+        except tk.TclError:
+            return ""
+
+    def _copy_selection(self, widget):
+        value = self._selection(widget)
+        if widget is getattr(self, "password_result_entry", None):
+            self._copy_password_value(value)
+        else:
+            self._copy(value)
+        return "break"
+
+    def _cut_selection(self, widget):
+        if self._editable(widget) and self._selection(widget):
+            self._copy_selection(widget)
+            if isinstance(widget, tk.Text):
+                widget.delete(tk.SEL_FIRST, tk.SEL_LAST)
+            else:
+                widget.delete(tk.SEL_FIRST, tk.SEL_LAST)
+        return "break"
+
+    def _clipboard_menu(self, event):
+        widget = event.widget
+        widget.focus_set()
+        menu = tk.Menu(widget, tearoff=False)
+        editable = self._editable(widget)
+        selected = bool(self._selection(widget))
+        menu.add_command(label="Вырезать", command=lambda: self._cut_selection(widget),
+                         state="normal" if editable and selected else "disabled")
+        menu.add_command(label="Копировать", command=lambda: self._copy_selection(widget),
+                         state="normal" if selected else "disabled")
+        menu.add_command(label="Вставить", command=lambda: self._paste(widget),
+                         state="normal" if editable else "disabled")
+        menu.add_separator()
+        menu.add_command(label="Выделить всё", command=lambda: self._select_all(event))
+        # Keep a reference for inspection and destroy the previous menu.
+        previous = getattr(self, "clipboard_menu", None)
+        if previous is not None:
+            previous.destroy()
+        self.clipboard_menu = menu
+        x = event.x_root or widget.winfo_rootx()
+        y = event.y_root or widget.winfo_rooty() + widget.winfo_height()
+        try:
+            menu.tk_popup(x, y)
+        finally:
+            menu.grab_release()
+        return "break"
 
     def _field(self, parent, label, variable, column=0, *, values=None):
         frame = ttk.Frame(parent)
@@ -215,6 +353,11 @@ class MacConverterApp:
             )
         entry.grid(row=1, column=0, sticky="ew")
         self._bind_selection(entry)
+        if values is None:
+            button = ttk.Button(frame, text="Вставить", takefocus=False,
+                                command=lambda: self._paste(entry, replace=True))
+            button.grid(row=1, column=1, padx=(6, 0))
+            entry.paste_button = button
         return entry
 
     def _build_mac(self, page):
@@ -277,7 +420,6 @@ class MacConverterApp:
         self.ipv4_mask_entry = self._field(
             inputs, "Маска / префикс", self.ipv4_mask, 1, values=[f"/{p}" for p in range(33)]
         )
-        self.ipv4_entry.bind("<<Paste>>", self._paste_ipv4)
         self.ipv4_entry.bind("<FocusOut>", self._normalize_ipv4)
         self.ipv4_entry.bind("<Return>", self._normalize_ipv4)
         options = ttk.Frame(page)
@@ -343,32 +485,98 @@ class MacConverterApp:
         self.mtu_value = tk.StringVar(self.root, value="1500")
         self.overhead_value = tk.StringVar(self.root, value="0")
         self.ip_version = tk.StringVar(self.root, value="IPv4")
+        self.outer_ip_version = tk.StringVar(self.root, value="IPv4")
+        self.mtu_basis = tk.StringVar(self.root, value=next(iter(BASES)))
+        self.mtu_profile = tk.StringVar(self.root, value=next(iter(PROFILES)))
+        self.mtu_vlan_tags = tk.StringVar(self.root, value="0")
+        self.mtu_inner_tags = tk.StringVar(self.root, value="0")
+        self.mtu_pppoe = tk.BooleanVar(self.root, value=False)
+        self.mtu_gre_checksum = tk.BooleanVar(self.root, value=False)
+        self.mtu_gre_key = tk.BooleanVar(self.root, value=False)
+        self.mtu_gre_sequence = tk.BooleanVar(self.root, value=False)
+        self.mtu_esp_mode = tk.StringVar(self.root, value="tunnel")
+        self.mtu_esp_cipher = tk.StringVar(self.root, value="AES-GCM-16")
+        self.mtu_nat_t = tk.BooleanVar(self.root, value=False)
+        self.mtu_openvpn_format = tk.StringVar(self.root, value="DATA_V2")
+        self.mtu_openvpn_mode = tk.StringVar(self.root, value="TUN")
+        self.mtu_l2tp_length = tk.BooleanVar(self.root, value=False)
+        self.mtu_l2tp_sequence = tk.BooleanVar(self.root, value=False)
+        self.mtu_ppp_header = tk.StringVar(self.root, value="4")
         self.mss_error = tk.StringVar(self.root)
-        inputs = ttk.Frame(page)
-        inputs.grid(row=0, column=0, sticky="ew")
-        for column in range(3):
-            inputs.columnconfigure(column, weight=1)
-        self.mtu_entry = self._field(inputs, "Исходный IP MTU", self.mtu_value)
-        self._field(inputs, "Инкапсуляция, байт", self.overhead_value, 1)
-        self.version_entry = self._field(
-            inputs, "Версия внутреннего IP", self.ip_version, 2, values=("IPv4", "IPv6")
-        )
-        self.version_entry.configure(state="readonly")
+        self.mtu_controls = {}
+
+        def row(number):
+            frame = ttk.Frame(page)
+            frame.grid(row=number, column=0, sticky="ew", pady=(0, 12))
+            for column in range(3):
+                frame.columnconfigure(column, weight=1, uniform="fields")
+            return frame
+
+        def choice(parent, label, variable, column, values):
+            entry = self._field(parent, label, variable, column, values=values)
+            entry.configure(state="readonly")
+            self.mtu_controls[label] = entry
+            return entry
+
+        inputs = row(0)
+        self.mtu_entry = self._field(inputs, "Исходный размер, байт", self.mtu_value)
+        choice(inputs, "Что измерено", self.mtu_basis, 1, tuple(BASES))
+        self.version_entry = choice(inputs, "Внутренний IP", self.ip_version, 2, ("IPv4", "IPv6"))
+        inputs = row(1)
+        choice(inputs, "Инкапсуляция", self.mtu_profile, 0, tuple(PROFILES))
+        choice(inputs, "Внешний IP", self.outer_ip_version, 1, ("IPv4", "IPv6"))
+        self.overhead_entry = self._field(inputs, "Дополнительно, байт", self.overhead_value, 2)
+        inputs = row(2)
+        choice(inputs, "Внешние VLAN: 0 / dot1q / QinQ", self.mtu_vlan_tags, 0, ("0", "1", "2"))
+        ttk.Checkbutton(inputs, text="PPPoE (6 + PPP 2 байта)", variable=self.mtu_pppoe).grid(
+            row=0, column=1, columnspan=2, sticky="w", padx=12)
+        advanced = ttk.Frame(page)
+        advanced.grid(row=3, column=0, sticky="ew")
+        advanced.columnconfigure(0, weight=1)
+        self.mtu_advanced = {}
+        for profile in ("gre", "vxlan", "ipsec", "openvpn", "l2tp"):
+            frame = ttk.Frame(advanced)
+            frame.grid(row=0, column=0, sticky="ew", pady=(0, 12))
+            for column in range(3):
+                frame.columnconfigure(column, weight=1)
+            self.mtu_advanced[profile] = frame
+        frame = self.mtu_advanced["gre"]
+        for col, (label, variable) in enumerate((("Checksum", self.mtu_gre_checksum),
+                                               ("Key", self.mtu_gre_key),
+                                               ("Sequence", self.mtu_gre_sequence))):
+            ttk.Checkbutton(frame, text=f"GRE {label} (+4)", variable=variable).grid(
+                row=0, column=col, sticky="w")
+        choice(self.mtu_advanced["vxlan"], "Внутренние VLAN-теги", self.mtu_inner_tags, 0, ("0", "1", "2"))
+        frame = self.mtu_advanced["ipsec"]
+        choice(frame, "ESP mode", self.mtu_esp_mode, 0, ("tunnel", "transport"))
+        choice(frame, "ESP cipher / integrity", self.mtu_esp_cipher, 1, tuple(CIPHERS))
+        ttk.Checkbutton(frame, text="NAT-T UDP (+8)", variable=self.mtu_nat_t).grid(row=0, column=2, sticky="w")
+        frame = self.mtu_advanced["openvpn"]
+        choice(frame, "OpenVPN data format", self.mtu_openvpn_format, 0, ("DATA_V1", "DATA_V2"))
+        choice(frame, "OpenVPN interface", self.mtu_openvpn_mode, 1, ("TUN", "TAP"))
+        choice(frame, "TAP VLAN-теги", self.mtu_inner_tags, 2, ("0", "1", "2"))
+        frame = self.mtu_advanced["l2tp"]
+        choice(frame, "ESP cipher / integrity", self.mtu_esp_cipher, 0, tuple(CIPHERS))
+        choice(frame, "PPP header, байт", self.mtu_ppp_header, 1, ("1", "2", "4"))
+        options = ttk.Frame(frame)
+        options.grid(row=0, column=2, sticky="w")
+        for label, variable in (("NAT-T (+8)", self.mtu_nat_t),
+                                ("L2TP Length (+2)", self.mtu_l2tp_length),
+                                ("L2TP Sequence (+4)", self.mtu_l2tp_sequence)):
+            ttk.Checkbutton(options, text=label, variable=variable).pack(anchor="w")
         ttk.Label(page, textvariable=self.mss_error, wraplength=780, bootstyle="danger").grid(
-            row=1, column=0, sticky="ew", pady=(12, 4)
-        )
-        self.mss_table = OutputTable(self, page, calculate_mss("1500").rows().keys())
-        self.mss_table.frame.grid(row=2, column=0, sticky="ew", pady=(8, 16))
-        ttk.Label(
-            page,
-            text=(
-                "MSS учитывает фиксированные IP/TCP-заголовки. Опции уменьшают фактический объём TCP-данных отдельно. "
-                "Инкапсуляция задаётся вручную; Path MTU не измеряется."
-            ),
-            wraplength=780,
-            bootstyle="secondary",
-        ).grid(row=3, column=0, sticky="ew")
-        for variable in (self.mtu_value, self.overhead_value, self.ip_version):
+            row=4, column=0, sticky="ew", pady=(4, 4))
+        self.mss_table = OutputTable(self, page, calculate_mtu(MtuOptions()).rows().keys())
+        self.mss_table.frame.grid(row=5, column=0, sticky="ew", pady=(8, 12))
+        container, self.mtu_breakdown = self._text_widget(page, height=7, readonly=True)
+        container.grid(row=6, column=0, sticky="ew")
+        for variable in (self.mtu_value, self.overhead_value, self.ip_version,
+                         self.outer_ip_version, self.mtu_basis, self.mtu_profile,
+                         self.mtu_vlan_tags, self.mtu_inner_tags, self.mtu_pppoe,
+                         self.mtu_gre_checksum, self.mtu_gre_key, self.mtu_gre_sequence,
+                         self.mtu_esp_mode, self.mtu_esp_cipher, self.mtu_nat_t,
+                         self.mtu_openvpn_format, self.mtu_openvpn_mode,
+                         self.mtu_l2tp_length, self.mtu_l2tp_sequence, self.mtu_ppp_header):
             variable.trace_add("write", self._mss_update)
 
     def _text_widget(self, parent, *, height=8, readonly=False):
@@ -402,6 +610,10 @@ class MacConverterApp:
         ).grid(row=1, column=0, sticky="w", pady=(12, 7))
         container, self.routes_input = self._text_widget(page, height=5)
         container.grid(row=2, column=0, sticky="nsew")
+        self.routes_paste_button = ttk.Button(
+            inputs, text="Вставить маршруты", takefocus=False,
+            command=lambda: self._paste(self.routes_input, replace=True))
+        self.routes_paste_button.grid(row=0, column=1, padx=(10, 0), sticky="s")
         self.routes_input.insert(
             "1.0", "0.0.0.0/0 default\n10.20.0.0/16 core\n10.20.30.0/24 access"
         )
@@ -429,35 +641,156 @@ class MacConverterApp:
         self.route_address.trace_add("write", self._routes_update)
 
     def _build_acl(self, page):
+        self.acl_source = tk.StringVar(self.root, value="192.0.2.10")
+        self.acl_destination = tk.StringVar(self.root, value="198.51.100.20")
+        self.acl_protocol = tk.StringVar(self.root, value="TCP")
+        self.acl_source_port = tk.StringVar(self.root, value="53000")
+        self.acl_destination_port = tk.StringVar(self.root, value="443")
+        self.acl_ack = tk.BooleanVar(self.root, value=False)
+        self.acl_flow_error = tk.StringVar(self.root)
+        inputs = ttk.Frame(page)
+        inputs.grid(row=0, column=0, sticky="ew")
+        for column in range(3):
+            inputs.columnconfigure(column, weight=1, uniform="aclfields")
+        self.acl_entry = self._field(inputs, "IPv4 источника", self.acl_source)
+        self.acl_destination_entry = self._field(inputs, "IPv4 назначения", self.acl_destination, 1)
+        self.acl_protocol_entry = self._field(inputs, "Тип трафика", self.acl_protocol, 2, values=("TCP", "UDP"))
+        self.acl_protocol_entry.configure(state="readonly")
+        ports = ttk.Frame(page)
+        ports.grid(row=1, column=0, sticky="ew", pady=(12, 0))
+        for column in range(3):
+            ports.columnconfigure(column, weight=1, uniform="aclfields")
+        self.acl_source_port_entry = self._field(ports, "Порт источника (можно пустой)", self.acl_source_port)
+        self.acl_destination_port_entry = self._field(ports, "Порт назначения", self.acl_destination_port, 1)
+        self.acl_ack_button = ttk.Checkbutton(ports, text="TCP-запрос: ACK или RST", variable=self.acl_ack)
+        self.acl_ack_button.grid(row=0, column=2, sticky="w", padx=12)
+        ttk.Label(page, text="ACL Cisco IOS IPv4. Вторая ACL проверяет ответ: IP и порты меняются местами.",
+                  wraplength=780, bootstyle="secondary").grid(row=2, column=0, sticky="ew", pady=(12, 8))
+        lists = ttk.Frame(page)
+        lists.grid(row=3, column=0, sticky="ew")
+        self.acl_inputs = []
+        for column, label in enumerate(("ACL запроса", "ACL ответа (необязательно)")):
+            lists.columnconfigure(column, weight=1, uniform="acllists")
+            frame = ttk.Frame(lists)
+            frame.grid(row=0, column=column, sticky="nsew", padx=(0, 8) if column == 0 else (8, 0))
+            frame.columnconfigure(0, weight=1)
+            ttk.Label(frame, text=label).grid(row=0, column=0, sticky="w")
+            container, widget = self._text_widget(frame, height=7)
+            container.grid(row=1, column=0, sticky="nsew", pady=(6, 0))
+            widget.configure(width=30, wrap="none")
+            horizontal = ttk.Scrollbar(frame, orient="horizontal", command=widget.xview)
+            horizontal.grid(row=2, column=0, sticky="ew")
+            widget.configure(xscrollcommand=horizontal.set)
+            button = ttk.Button(frame, text="Вставить ACL", command=lambda entry=widget: self._paste(entry, replace=True))
+            button.grid(row=3, column=0, sticky="w", pady=(6, 0))
+            widget.paste_button = button
+            self.acl_inputs.append(widget)
+        self.acl_forward_input, self.acl_reverse_input = self.acl_inputs
+        actions = ttk.Frame(page)
+        actions.grid(row=4, column=0, sticky="ew", pady=(10, 4))
+        self.acl_example_button = ttk.Button(actions, text="Пример HTTPS", command=self._acl_example)
+        self.acl_example_button.pack(side="left")
+        ttk.Button(actions, text="Очистить ACL", command=self._acl_clear).pack(side="left", padx=8)
+        self.acl_copy_button = ttk.Button(actions, text="Копировать заключение", command=self.copy_acl)
+        self.acl_copy_button.pack(side="right")
+        ttk.Label(page, textvariable=self.acl_flow_error, wraplength=780, bootstyle="danger").grid(
+            row=5, column=0, sticky="ew", pady=(4, 4))
+        container, self.acl_output = self._text_widget(page, height=9, readonly=True)
+        container.grid(row=6, column=0, sticky="ew")
+        ttk.Label(page, text="«Пример HTTPS» загружает тестовые адреса и правила. Первый permit/deny определяет результат; без совпадения действует неявный deny. Неизвестный порт может требовать уточнения.",
+                  wraplength=780, bootstyle="secondary").grid(row=7, column=0, sticky="ew", pady=(8, 8))
+        self.acl_wildcard_visible = tk.BooleanVar(self.root, value=False)
+        ttk.Checkbutton(page, text="Дополнительно: проверить одно условие wildcard",
+                        variable=self.acl_wildcard_visible, command=self._toggle_wildcard).grid(row=8, column=0, sticky="w")
+        extra = ttk.Frame(page)
+        extra.grid(row=9, column=0, sticky="ew", pady=(12, 0))
+        extra.columnconfigure(0, weight=1)
+        self.acl_wildcard_frame = extra
         self.acl_base = tk.StringVar(self.root, value="10.10.0.0")
         self.acl_wildcard = tk.StringVar(self.root, value="0.0.255.254")
         self.acl_address = tk.StringVar(self.root, value="10.10.5.2")
         self.acl_error = tk.StringVar(self.root)
-        inputs = ttk.Frame(page)
+        inputs = ttk.Frame(extra)
         inputs.grid(row=0, column=0, sticky="ew")
         for column in range(3):
             inputs.columnconfigure(column, weight=1)
-        self.acl_entry = self._field(inputs, "Базовый IPv4", self.acl_base)
+        self.acl_base_entry = self._field(inputs, "Базовый IPv4", self.acl_base)
         self._field(inputs, "Wildcard", self.acl_wildcard, 1)
         self._field(inputs, "Проверяемый IPv4", self.acl_address, 2)
-        ttk.Label(page, textvariable=self.acl_error, wraplength=780, bootstyle="danger").grid(
-            row=1, column=0, sticky="ew", pady=(12, 4)
-        )
-        self.acl_table = OutputTable(
-            self, page, check_wildcard("10.10.0.0", "0.0.255.254", "10.10.5.2").rows().keys()
-        )
-        self.acl_table.frame.grid(row=2, column=0, sticky="ew", pady=(8, 16))
-        ttk.Label(
-            page,
-            text=(
-                "В wildcard: 0 — сравнить бит, 1 — игнорировать. Поддерживаются прерывистые маски. "
-                "Проверяется только адресное условие, без permit/deny, порядка правил и портов."
-            ),
-            wraplength=780,
-            bootstyle="secondary",
-        ).grid(row=3, column=0, sticky="ew")
+        ttk.Label(extra, textvariable=self.acl_error, wraplength=780, bootstyle="danger").grid(row=1, column=0, sticky="ew")
+        self.acl_table = OutputTable(self, extra, check_wildcard("10.10.0.0", "0.0.255.254", "10.10.5.2").rows().keys())
+        self.acl_table.frame.grid(row=2, column=0, sticky="ew", pady=(8, 0))
         for variable in (self.acl_base, self.acl_wildcard, self.acl_address):
             variable.trace_add("write", self._acl_update)
+        self._toggle_wildcard()
+        self._acl_example()
+        for variable in (self.acl_source, self.acl_destination, self.acl_protocol,
+                         self.acl_source_port, self.acl_destination_port, self.acl_ack):
+            variable.trace_add("write", self._acl_flow_update)
+        for widget in self.acl_inputs:
+            widget.edit_modified(False)
+            widget.bind("<<Modified>>", self._acl_modified)
+
+    def _toggle_wildcard(self):
+        if self.acl_wildcard_visible.get():
+            self.acl_wildcard_frame.grid()
+        else:
+            self.acl_wildcard_frame.grid_remove()
+
+    def _acl_example(self):
+        self.acl_source.set("192.0.2.10")
+        self.acl_destination.set("198.51.100.20")
+        self.acl_protocol.set("TCP")
+        self.acl_source_port.set("53000")
+        self.acl_destination_port.set("443")
+        self.acl_ack.set(False)
+        examples = ("ip access-list extended REQUEST\n10 permit tcp host 192.0.2.10 host 198.51.100.20 eq https\n20 deny ip any any log",
+                    "ip access-list extended REPLY\n10 permit tcp host 198.51.100.20 eq https host 192.0.2.10 range 1024 65535 established\n20 deny ip any any log")
+        for widget, text in zip(self.acl_inputs, examples, strict=True):
+            widget.delete("1.0", tk.END)
+            widget.insert("1.0", text)
+            widget.edit_modified(False)
+        self._acl_flow_update()
+
+    def _acl_clear(self):
+        for widget in self.acl_inputs:
+            widget.delete("1.0", tk.END)
+            widget.edit_modified(False)
+        self._acl_flow_update()
+
+    def _acl_modified(self, event):
+        if not event.widget.edit_modified():
+            return
+        event.widget.edit_modified(False)
+        if self._acl_job is not None:
+            self.root.after_cancel(self._acl_job)
+        self._set_text(self.acl_output, "")
+        self.acl_copy_button.state(["disabled"])
+        self.acl_flow_error.set("Проверка правил...")
+        self._acl_job = self.root.after(180, self._acl_flow_update)
+
+    def _acl_flow_update(self, *_args):
+        if self._acl_job is not None:
+            self.root.after_cancel(self._acl_job)
+            self._acl_job = None
+        self.acl_ack_button.state(["!disabled" if self.acl_protocol.get() == "TCP" else "disabled"])
+        try:
+            flow = make_flow(self.acl_source.get(), self.acl_destination.get(), self.acl_protocol.get(),
+                             self.acl_source_port.get(), self.acl_destination_port.get(), self.acl_ack.get())
+            result = check_conversation(self.acl_forward_input.get("1.0", "end-1c"),
+                                        self.acl_reverse_input.get("1.0", "end-1c"), flow)
+        except InvalidNetworkInput as error:
+            self.acl_flow_error.set(str(error))
+            self._set_text(self.acl_output, "")
+            self.acl_copy_button.state(["disabled"])
+            return
+        self.acl_flow_error.set("")
+        self._set_text(self.acl_output, result)
+        self.acl_copy_button.state(["!disabled"])
+
+    def copy_acl(self):
+        if self.acl_copy_button.instate(["!disabled"]):
+            self._copy(self.acl_output.get("1.0", "end-1c"))
 
     def _build_passwords(self, page):
         self.password_length = tk.StringVar(self.root, value="20")
@@ -476,7 +809,7 @@ class MacConverterApp:
         inputs.grid(row=0, column=0, sticky="ew")
         inputs.columnconfigure(0, weight=1)
         inputs.columnconfigure(1, weight=3)
-        self.password_length_entry = self._field(inputs, "Длина · 8–128", self.password_length)
+        self.password_length_entry = self._field(inputs, "Длина · 8-128", self.password_length)
         self.password_symbols_entry = self._field(
             inputs, "Допустимые спецсимволы", self.password_symbols, 1
         )
@@ -485,9 +818,9 @@ class MacConverterApp:
         self.password_group_buttons = {}
         for col, (name, label) in enumerate(
             (
-                ("lowercase", "a–z"),
-                ("uppercase", "A–Z"),
-                ("digits", "0–9"),
+                ("lowercase", "a-z"),
+                ("uppercase", "A-Z"),
+                ("digits", "0-9"),
                 ("symbols", "Спецсимволы"),
             )
         ):
@@ -585,7 +918,7 @@ class MacConverterApp:
         self.password_error.set("")
         self.password_generate_button.state(["!disabled"])
         hint = (
-            " Для обычных учётных записей лучше использовать 16–20 и более символов."
+            " Для обычных учётных записей лучше использовать 16-20 и более символов."
             if options.length < 16
             else ""
         )
@@ -615,7 +948,9 @@ class MacConverterApp:
         self.password_result_entry.configure(show="" if self.password_show.get() else "*")
 
     def copy_password(self):
-        value = self.password_result.get()
+        self._copy_password_value(self.password_result.get())
+
+    def _copy_password_value(self, value):
         if not value:
             return
         try:
@@ -671,12 +1006,18 @@ class MacConverterApp:
         self.status.set("Пароль очищен")
 
     def close(self):
+        if self._acl_job is not None:
+            self.root.after_cancel(self._acl_job)
+            self._acl_job = None
         self._clear_password_clipboard(retry=False)
         self.password_result.set("")
         self.root.destroy()
 
     def _destroyed(self, event):
         if event.widget == self.root:
+            if self._acl_job is not None:
+                self.root.after_cancel(self._acl_job)
+                self._acl_job = None
             self._clear_password_clipboard(retry=False)
             self.password_result.set("")
 
@@ -721,7 +1062,7 @@ class MacConverterApp:
     def _update_help(self):
         index = self.notebook.index(self.notebook.select())
         topic = TOOL_HELP[index]
-        self.help_window.title(f"Помощь — {topic.name}")
+        self.help_window.title(f"Помощь - {topic.name}")
         self.help_title.set(topic.name)
         self._set_text(self.help_text, topic.text())
 
@@ -835,34 +1176,45 @@ class MacConverterApp:
             text="Адреса блока (/0)" if result.network.prefixlen == 0 else "Список хостов"
         )
 
-    def _paste_ipv4(self, _event):
-        try:
-            text = self.root.clipboard_get().strip()
-            if "/" not in text:
-                return None
-            result = calculate_ipv4(text)
-        except (tk.TclError, InvalidNetworkInput):
-            return None
-        self._syncing_ipv4 = True
-        self.ipv4_address.set(str(result.address))
-        self.ipv4_mask.set(f"/{result.network.prefixlen}")
-        self._syncing_ipv4 = False
-        self._ipv4_update()
-        return "break"
-
     def _normalize_ipv4(self, _event=None):
         if self.ipv4_calculation is not None and "/" in self.ipv4_address.get():
             self.ipv4_address.set(str(self.ipv4_calculation.address))
 
     def _mss_update(self, *_args):
+        profile = PROFILES.get(self.mtu_profile.get(), "")
+        for key, frame in self.mtu_advanced.items():
+            if key == profile:
+                frame.grid()
+            else:
+                frame.grid_remove()
         try:
-            version = {"IPv4": 4, "IPv6": 6}[self.ip_version.get()]
-            result = calculate_mss(self.mtu_value.get(), version, self.overhead_value.get())
+            def integer(variable):
+                text = variable.get().strip()
+                if not re.fullmatch(r"[0-9]{1,5}", text):
+                    raise InvalidNetworkInput("Размеры и overhead: целые неотрицательные числа.")
+                return int(text)
+            result = calculate_mtu(MtuOptions(
+                size=integer(self.mtu_value), basis=BASES[self.mtu_basis.get()], profile=profile,
+                inner_ip={"IPv4": 4, "IPv6": 6}[self.ip_version.get()],
+                outer_ip={"IPv4": 4, "IPv6": 6}[self.outer_ip_version.get()],
+                extra=integer(self.overhead_value), vlan_tags=integer(self.mtu_vlan_tags),
+                pppoe=self.mtu_pppoe.get(), inner_tags=integer(self.mtu_inner_tags),
+                gre_checksum=self.mtu_gre_checksum.get(), gre_key=self.mtu_gre_key.get(),
+                gre_sequence=self.mtu_gre_sequence.get(), esp_mode=self.mtu_esp_mode.get(),
+                esp_cipher=self.mtu_esp_cipher.get(), nat_t=self.mtu_nat_t.get(),
+                openvpn_v2=self.mtu_openvpn_format.get() == "DATA_V2",
+                openvpn_tap=self.mtu_openvpn_mode.get() == "TAP",
+                l2tp_length=self.mtu_l2tp_length.get(), l2tp_sequence=self.mtu_l2tp_sequence.get(),
+                ppp_header=integer(self.mtu_ppp_header)))
         except (InvalidNetworkInput, KeyError) as error:
+            self.mtu_calculation = None
             self.mss_table.clear()
-            self.mss_error.set(str(error))
+            self._set_text(self.mtu_breakdown, "")
+            self.mss_error.set(str(error) if isinstance(error, InvalidNetworkInput) else "Выберите параметры из списка.")
             return
+        self.mtu_calculation = result
         self.mss_table.update(result.rows())
+        self._set_text(self.mtu_breakdown, result.explanation())
         self.mss_error.set("")
 
     def _routes_modified(self, _event):
@@ -934,12 +1286,10 @@ class MacConverterApp:
             self.copy_routes()
         elif index == 5:
             self.copy_password()
-        else:
-            table = self.mss_table if index == 2 else self.acl_table
-            if all(value.get() != "—" for value in table.values.values()):
-                self._copy(
-                    "\n".join(f"{label}: {value.get()}" for label, value in table.values.items())
-                )
+        elif index == 4:
+            self.copy_acl()
+        elif self.mtu_calculation is not None:
+            self._copy(self.mtu_calculation.copy_text())
         return "break"
 
     def show_hosts(self):
@@ -1097,7 +1447,11 @@ class MacConverterApp:
         ):
             table.clear()
         self._set_text(self.routes_output, "")
+        self._set_text(self.acl_output, "")
+        self._set_text(self.mtu_breakdown, "")
+        self.mtu_calculation = None
         for button in (
+            self.acl_copy_button,
             self.ipv4_copy_button,
             self.ipv4_binary_copy,
             self.hosts_button,

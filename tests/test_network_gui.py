@@ -24,7 +24,7 @@ def test_ipv4_invalid_mask_clears_all_results_and_recovers(app):
     assert app.ipv4_copy_button.instate(["disabled"])
     assert app.hosts_button.instate(["disabled"])
     for table in (app.ipv4_addresses_table, app.ipv4_mask_table, app.ipv4_range_table):
-        assert all(value.get() == "—" for value in table.values.values())
+        assert all(value.get() == "-" for value in table.values.values())
         assert all(button.instate(["disabled"]) for button in table.buttons.values())
     app.ipv4_mask.set("255.255.255.0")
     assert app.ipv4_calculation.network.prefixlen == 24
@@ -99,7 +99,7 @@ def test_host_pages_copy_last_page_and_snapshot(app):
     [
         ("192.0.2.0/31", "2", "Не применяется"),
         ("192.0.2.1/32", "1", "Не применяется"),
-        ("0.0.0.0/0", "—", "255.255.255.255"),
+        ("0.0.0.0/0", "-", "255.255.255.255"),
     ],
 )
 def test_special_ipv4_prefixes_in_ui(app, cidr, count, broadcast):
@@ -212,7 +212,7 @@ def test_keyboard_navigation_and_copy_current_tool(app, index):
         "Подсеть CIDR: 192.168.1.0/24",
         "TCP MSS: 1460",
         "[LPM] 10.20.30.0/24",
-        "Совпадение: Совпадает",
+        "запрос и ответ разрешены",
     )[index]
     assert expected in app.root.clipboard_get()
 
@@ -248,7 +248,7 @@ def test_range_is_full_width_readonly_and_copyable(app):
     assert entry.winfo_width() > app.ipv4_addresses_table.entries["Первый хост"].winfo_width()
     entry.insert(0, "incorrect")
     app.ipv4_range_table.buttons["Диапазон хостов"].invoke()
-    assert app.root.clipboard_get() == "192.168.1.1 – 192.168.1.254"
+    assert app.root.clipboard_get() == "192.168.1.1 - 192.168.1.254"
 
 
 def test_readonly_host_list_remains_reachable_with_tab(app):

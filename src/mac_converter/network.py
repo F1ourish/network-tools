@@ -12,7 +12,7 @@ class InvalidNetworkInput(ValueError):
 def ipv4_address(value: str) -> IPv4Address:
     text = value.strip()
     if not re.fullmatch(r"(?:0|[1-9][0-9]{0,2})(?:\.(?:0|[1-9][0-9]{0,2})){3}", text):
-        raise InvalidNetworkInput("IPv4: нужны четыре октета 0–255 без ведущих нулей.")
+        raise InvalidNetworkInput("IPv4: нужны четыре октета 0-255 без ведущих нулей.")
     try:
         return IPv4Address(text)
     except ValueError:
@@ -34,7 +34,7 @@ def prefix_from_mask(value: str) -> int:
                 "Полная маска: единицы должны идти перед нулями. Wildcard здесь не принимается."
             )
         return mask.bit_count()
-    raise InvalidNetworkInput("Выберите /0–/32 или введите полную маску, например 255.255.255.0.")
+    raise InvalidNetworkInput("Выберите /0-/32 или введите полную маску, например 255.255.255.0.")
 
 
 @dataclass(frozen=True)
@@ -70,10 +70,10 @@ class IPv4Calculation:
         if prefix == 0:
             return (
                 "Весь IPv4 / default route, включая специальные адреса. "
-                "255.255.255.255 — limited broadcast; число адресов не означает число хостов."
+                "255.255.255.255 - limited broadcast; число адресов не означает число хостов."
             )
         if prefix == 31:
-            return "Point-to-point: оба адреса — узлы. Направленный broadcast не применяется."
+            return "Point-to-point: оба адреса - узлы. Направленный broadcast не применяется."
         if prefix == 32:
             return "Host route: один отдельный адрес, broadcast подсети не применяется."
         if self.address != self.network.network_address:
@@ -91,8 +91,8 @@ class IPv4Calculation:
             "Wildcard": str(self.network.hostmask),
             "Первый хост": str(first) if first is not None else "Не применяется к /0",
             "Последний хост": str(last) if last is not None else "Не применяется к /0",
-            "Диапазон хостов": f"{first} – {last}" if first is not None else "Не применяется к /0",
-            "Хостовых позиций": str(self.host_count) if self.host_count is not None else "—",
+            "Диапазон хостов": f"{first} - {last}" if first is not None else "Не применяется к /0",
+            "Хостовых позиций": str(self.host_count) if self.host_count is not None else "-",
             "Всего адресов": str(self.network.num_addresses),
             "Broadcast подсети": (
                 str(self.network.broadcast_address)

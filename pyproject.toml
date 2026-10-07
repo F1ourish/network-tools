@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "mac-address-converter"
 dynamic = ["version"]
-description = "Portable offline network tools: MAC, IPv4, MSS, routes, ACL wildcard and secure passwords"
+description = "Portable offline network tools: MAC, IPv4, MTU/MSS, encapsulations, routes, IPv4 ACL and secure passwords"
 readme = "README.md"
 requires-python = ">=3.12"
 license = "MIT"

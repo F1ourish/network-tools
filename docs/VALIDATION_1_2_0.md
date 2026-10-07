@@ -47,5 +47,5 @@ clipboard, пустой генератор после перезапуска, с
 Источник фактических чисел, commit и хеша опубликованного EXE:
 RELEASE_VERIFICATION.json в assets релиза и связанный workflow run.
 
-Не покрыты отдельно Windows 10/11, DPI 125–200%, Defender/SmartScreen,
+Не покрыты отдельно Windows 10/11, DPI 125-200%, Defender/SmartScreen,
 корпоративные политики и история clipboard. История 1.1.0 сохранена отдельно.

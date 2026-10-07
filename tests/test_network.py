@@ -60,7 +60,7 @@ def test_invalid_or_non_contiguous_netmask(mask):
 def test_ipv4_copy_default_host_normalization_and_strict_network():
     result = calculate_ipv4(" 192.168.1.42 ", "255.255.255.0")
     assert str(result.network) == "192.168.1.0/24"
-    assert result.rows()["Диапазон хостов"] == "192.168.1.1 – 192.168.1.254"
+    assert result.rows()["Диапазон хостов"] == "192.168.1.1 - 192.168.1.254"
     assert result.host_count == 254
     assert "Broadcast подсети: 192.168.1.255" in result.copy_text()
     with pytest.raises(InvalidNetworkInput, match="192.168.1.0/24"):
@@ -114,7 +114,7 @@ def test_large_host_pagination_and_last_page_do_not_enumerate_network():
 def test_default_route_is_address_block_not_usable_hosts():
     result = calculate_ipv4("0.0.0.0/0")
     assert result.first_host is result.last_host is result.host_count is None
-    assert result.rows()["Хостовых позиций"] == "—"
+    assert result.rows()["Хостовых позиций"] == "-"
     assert "limited broadcast" in result.note
     page = host_page(result)
     assert page.total == 4294967296

@@ -32,6 +32,18 @@ jobs:
         run: |
           python -m pip install -r requirements-dev.txt
           python -m pip install --no-build-isolation -e .
+      - name: Export candidate formatting for local review
+        run: |
+          mkdir -p /tmp/candidate-format
+          cp -R src tests scripts packaging /tmp/candidate-format/
+          python -m ruff format /tmp/candidate-format
+          tar -czf candidate-format.tar.gz -C /tmp/candidate-format .
+      - name: Upload candidate formatting
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: candidate-format
+          path: candidate-format.tar.gz
+          retention-days: 3
       - name: Check Python code
         run: |
           python -m ruff check src tests scripts packaging/gui_entry.py

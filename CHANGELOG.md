@@ -1,8 +1,23 @@
 # Changelog
 
-## 1.2.0 — 2026-10-07
+## 1.3.0 - 2026-10-07
 
-- Генератор паролей: secrets/CSPRNG, длина 8–128 (default 20), обязательные выбранные
+- MTU/MSS: явный IP/L2 budget, dot1q/QinQ, PPPoE без повторного вычитания,
+  IP-in-IP, GRE с опциями, WireGuard, VXLAN, IPsec ESP, OpenVPN UDP AEAD, L2TP/IPsec.
+- Выбор IPv4/IPv6, ESP режима/алгоритма/NAT-T, OpenVPN DATA_V1/V2 и TUN/TAP,
+  L2TP/PPP параметров; состав overhead, размер кадра с FCS, padding и резерв.
+- ACL: два списка для запроса/ответа, IPv4 источника/назначения, TCP/UDP и оба порта;
+  первый permit/deny, sequence number, неявный deny и точная строка решения.
+- Неподдерживаемый синтаксис останавливает проверку; неизвестный нужный порт
+  даёт нехватку данных. Старый wildcard-инструмент сохранён в дополнительном блоке.
+- Кнопки вставки, Ctrl+V/Shift+Insert, меню вырезать/копировать/вставить;
+  Windows shortcuts работают с русской раскладкой. Readonly-результаты защищены.
+- Справка и документация обновлены; в авторских текстах используется одиночный '-'.
+- Имя EXE MacAddressConverter.exe сохранено; старые опубликованные assets не меняются.
+
+## 1.2.0 - 2026-10-07
+
+- Генератор паролей: secrets/CSPRNG, длина 8-128 (default 20), обязательные выбранные
   группы, ручной набор спецсимволов, исключение похожих символов и точная энтропия.
 - Скрытие/показ, Copy/Очистить, очистка устаревшего результата при изменении политики;
   условная очистка собственного clipboard через 30 с и при закрытии.
@@ -12,7 +27,7 @@
 - Publisher выбирает release notes по текущей версии вместо фиксированного 1.1.0.
 
 
-## 1.1.0 — 2026-10-06
+## 1.1.0 - 2026-10-06
 
 - Added IPv4 subnet calculator with default 192.168.1.0/24, CIDR paste,
   netmask validation, network-only validation and separate subnet/host/broadcast outputs.
@@ -26,7 +41,7 @@
 - Added pinned UI dependencies, bundled third-party notices, expanded EXE verification,
   portable ZIP, SHA-256 checksums and a gated GitHub Release workflow.
 
-## 1.0.0 — verified candidate, not separately released
+## 1.0.0 - verified candidate, not separately released
 
 - MAC-48 conversion: Cisco, Colon, Hyphen, Plain; case selection.
 - Live Tkinter GUI, readonly result, Copy and keyboard shortcuts.

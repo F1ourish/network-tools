@@ -285,6 +285,35 @@ def run_ui_checks(binary: Path) -> tuple[list[str], list[dict]]:
         write_clipboard(value)
         keys(0x11, ord("V"))
 
+    def select_choice(tab_count, index):
+        focus_control(tab_count)
+        keys(0x12, 0x28)  # Alt+Down opens a readonly combobox.
+        keys(0x24)  # Home.
+        for _ in range(index):
+            keys(0x28)
+        keys(0x0D)
+
+    def russian_clipboard_check(hwnd):
+        user32.LoadKeyboardLayoutW.argtypes = [wt.LPCWSTR, wt.UINT]
+        user32.LoadKeyboardLayoutW.restype = wt.HANDLE
+        user32.GetKeyboardLayout.argtypes = [wt.DWORD]
+        user32.GetKeyboardLayout.restype = wt.HANDLE
+        thread = user32.GetWindowThreadProcessId(hwnd, None)
+        original = user32.GetKeyboardLayout(thread)
+        russian = user32.LoadKeyboardLayoutW("00000419", 0)
+        assert russian, "Russian keyboard layout could not be loaded"
+        try:
+            user32.PostMessageW(hwnd, 0x50, 0, russian)  # WM_INPUTLANGCHANGEREQUEST.
+            wait_until(lambda: user32.GetKeyboardLayout(thread) == russian)
+            focus_control(0)  # Ctrl+L must work in this layout too.
+            keys(0x11, ord("A"))
+            write_clipboard("aabb.ccdd.eeff")
+            keys(0x11, ord("V"))
+            copy_tool("aa:bb:cc:dd:ee:ff")
+        finally:
+            user32.PostMessageW(hwnd, 0x50, 0, original)
+            wait_until(lambda: user32.GetKeyboardLayout(thread) == original)
+
     def assert_invalid_copy():
         write_clipboard("invalid tool sentinel")
         keys(0x11, 0x10, ord("C"))
@@ -465,6 +494,20 @@ def run_ui_checks(binary: Path) -> tuple[list[str], list[dict]]:
                         paste("0011.2233.aabb")
                         assert_result("00:11:22:33:aa:bb")
                         checks.append("Ctrl+L / Ctrl+V / Ctrl+A / Ctrl+C; live Colon conversion")
+                        russian_clipboard_check(hwnd)
+                        checks.append("Russian keyboard layout: Ctrl+L/A/V and Ctrl+Shift+C through Win32")
+                        paste("0011.2233.aabb")
+                        focus_control(0)
+                        keys(0x11, ord("A"))
+                        write_clipboard("00112233aabb")
+                        keys(0x10, 0x79)  # Shift+F10, native context menu.
+                        keys(0x24)  # Home: Cut (selection is present).
+                        keys(0x28)
+                        keys(0x28)  # Paste.
+                        keys(0x0D)
+                        copy_tool("00:11:22:33:aa:bb")
+                        checks.append("Context menu paste replaces selection without duplicate insertion")
+                        paste("0011.2233.aabb")
                         save_screenshot(hwnd, Path("smoke-results/windows-exe.png"))
                         checks.append("Screenshot of actual EXE saved")
                         for tabs, expected in (
@@ -574,7 +617,7 @@ def run_ui_checks(binary: Path) -> tuple[list[str], list[dict]]:
                             paste(cidr)
                             copy_tool(expected, "Broadcast подсети: Не применяется")
                         paste("0.0.0.0/0")
-                        copy_tool("Хостовых позиций: —", "Всего адресов: 4294967296")
+                        copy_tool("Хостовых позиций: -", "Всего адресов: 4294967296")
                         checks.append("IPv4 /31, /32 and /0 conventions through the EXE")
                         paste("192.168.1.0/24")
                         before_theme = copy_tool("Подсеть CIDR: 192.168.1.0/24")
@@ -591,17 +634,36 @@ def run_ui_checks(binary: Path) -> tuple[list[str], list[dict]]:
                         keys(0x11, ord("3"))
                         paste("1492")
                         copy_tool("TCP MSS: 1452")
-                        focus_control(2)
-                        keys(0x28)
-                        keys(0x28)  # First Down opens the list; second Down selects IPv6.
-                        keys(0x0D)
+                        select_choice(2, 1)
                         copy_tool("TCP MSS: 1432", "Фиксированный IP-заголовок: 40")
-                        paste_control(1, "60")
+                        paste_control(5, "60")
                         copy_tool("TCP MSS: 1372", "Эффективный IP MTU: 1432")
-                        save_screenshot(hwnd, Path("smoke-results/mss-night.png"))
                         paste("40")
                         assert_invalid_copy()
                         checks.append("MSS: IPv4, IPv6, manual overhead and invalid-MTU clear")
+                        paste("1500")
+                        paste_control(5, "0")
+                        select_choice(2, 0)
+                        select_choice(6, 1)  # dot1q, known IP MTU unchanged.
+                        copy_tool("TCP MSS: 1460", "Ethernet-кадр с FCS: 1522")
+                        select_choice(1, 1)  # Ethernet payload.
+                        focus_control(7)
+                        keys(0x20)  # PPPoE.
+                        copy_tool("Эффективный IP MTU: 1492", "TCP MSS: 1452")
+                        paste("1492")
+                        select_choice(1, 0)
+                        copy_tool("Эффективный IP MTU: 1492", "повторно не вычитается")
+                        checks.append("MTU layers: dot1q frame 1522, PPPoE payload and known IP MTU without double subtraction")
+                        focus_control(7)
+                        keys(0x20)
+                        select_choice(6, 0)
+                        paste("1500")
+                        for profile, mss in ((1, "1440"), (2, "1436"), (3, "1400"),
+                                             (4, "1410"), (5, "1406"), (6, "1408"), (7, "1388")):
+                            select_choice(3, profile)
+                            copy_tool(f"TCP MSS: {mss}", "Размер кадра включает FCS")
+                        save_screenshot(hwnd, Path("smoke-results/mtu-profiles-night.png"))
+                        checks.append("MTU EXE presets: IP-in-IP, GRE, WireGuard, VXLAN, ESP, OpenVPN UDP AEAD and L2TP/IPsec")
 
                         keys(0x11, ord("4"))
                         copy_tool("[LPM] 10.20.30.0/24  access")
@@ -626,17 +688,31 @@ def run_ui_checks(binary: Path) -> tuple[list[str], list[dict]]:
                         )
 
                         keys(0x11, ord("5"))
-                        copy_tool(
-                            "Совпадение: Совпадает", "Адресное условие: 10.10.0.0 0.0.255.254"
-                        )
-                        paste_control(2, "10.10.5.3")
-                        copy_tool("Совпадение: Не совпадает")
-                        save_screenshot(hwnd, Path("smoke-results/acl-night.png"))
-                        paste_control(1, "/24")
+                        copy_tool("запрос и ответ разрешены", "198.51.100.20:443 -> 192.0.2.10:53000")
+                        save_screenshot(hwnd, Path("smoke-results/acl-request-reply-night.png"))
+                        paste_control(8, "10 deny ip any any")
+                        copy_tool("БЛОКИРУЕТСЯ: sequence 10, строка 1", "ACL блокируют")
+                        checks.append("ACL EXE: request/reply address and port reversal; reply deny identifies exact rule")
+                        paste_control(8, "")
+                        paste_control(6, "permit tcp any any eq 80")
+                        copy_tool("Неявный deny", "обратный поток не проверен")
+                        checks.append("ACL EXE: implicit deny and empty reverse list are explicit")
+                        paste_control(6, "20 permit ip any any\n10 deny tcp any any eq 443")
+                        copy_tool("БЛОКИРУЕТСЯ: sequence 10, строка 2")
+                        paste_control(6, "permit tcp any eq 53000 any eq 443\npermit ip any any")
+                        paste_control(3, "")
+                        copy_tool("НЕДОСТАТОЧНО ДАННЫХ", "Неизвестен порт источника")
+                        checks.append("ACL EXE: sequence order and unknown source port do not produce false permit")
+                        paste_control(6, "permit ip any any\npermit tcp any any time-range DAY")
+                        time.sleep(0.3)  # Allow the 180-ms editor debounce to finish.
                         assert_invalid_copy()
-                        checks.append(
-                            "ACL: non-contiguous wildcard match, mismatch and invalid clear"
-                        )
+                        paste_control(6, "permit ip any any")
+                        copy_tool("запрос разрешён", "обратный поток не проверен")
+                        paste("bad")
+                        assert_invalid_copy()
+                        paste("192.0.2.10")
+                        copy_tool("запрос разрешён")
+                        checks.append("ACL EXE: unsupported conditions and invalid flow clear stale output and recover")
                         # These are disposable test secrets; never print or capture them unmasked.
                         keys(0x11, ord("6"))
                         password_test_started = True
@@ -706,13 +782,13 @@ def run_ui_checks(binary: Path) -> tuple[list[str], list[dict]]:
 
                         for tool, help_name in (
                             (4, "Маршруты"),
-                            (5, "ACL wildcard"),
+                            (5, "ACL"),
                             (6, "Пароли"),
                         ):
                             keys(0x11, ord(str(tool)))
                             keys(0x70)  # F1.
                             help_hwnd = wait_until(
-                                lambda: find_window(isolated.resolve(), f"Помощь — {help_name}")
+                                lambda: find_window(isolated.resolve(), f"Помощь - {help_name}")
                             )
                             user32.SetForegroundWindow(help_hwnd)
                             wait_until(lambda: user32.GetForegroundWindow() == help_hwnd)
@@ -728,7 +804,7 @@ def run_ui_checks(binary: Path) -> tuple[list[str], list[dict]]:
                             if tool == 4:
                                 assert "10.20.30.0/24" in help_text and "[LPM]" in help_text
                             elif tool == 5:
-                                assert "permit/deny" in help_text and "0.0.255.254" in help_text
+                                assert "permit/deny" in help_text and "ACL ответа" in help_text and "0.0.255.254" in help_text
                             save_screenshot(help_hwnd, Path(f"smoke-results/help-tool-{tool}.png"))
                             keys(0x1B)  # Escape.
                             wait_until(lambda: not user32.IsWindowVisible(help_hwnd))
