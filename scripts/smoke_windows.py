@@ -495,7 +495,9 @@ def run_ui_checks(binary: Path) -> tuple[list[str], list[dict]]:
                         assert_result("00:11:22:33:aa:bb")
                         checks.append("Ctrl+L / Ctrl+V / Ctrl+A / Ctrl+C; live Colon conversion")
                         russian_clipboard_check(hwnd)
-                        checks.append("Russian keyboard layout: Ctrl+L/A/V and Ctrl+Shift+C through Win32")
+                        checks.append(
+                            "Russian keyboard layout: Ctrl+L/A/V and Ctrl+Shift+C through Win32"
+                        )
                         paste("0011.2233.aabb")
                         focus_control(0)
                         keys(0x11, ord("A"))
@@ -506,7 +508,9 @@ def run_ui_checks(binary: Path) -> tuple[list[str], list[dict]]:
                         keys(0x28)  # Paste.
                         keys(0x0D)
                         copy_tool("00:11:22:33:aa:bb")
-                        checks.append("Context menu paste replaces selection without duplicate insertion")
+                        checks.append(
+                            "Context menu paste replaces selection without duplicate insertion"
+                        )
                         paste("0011.2233.aabb")
                         save_screenshot(hwnd, Path("smoke-results/windows-exe.png"))
                         checks.append("Screenshot of actual EXE saved")
@@ -653,17 +657,28 @@ def run_ui_checks(binary: Path) -> tuple[list[str], list[dict]]:
                         paste("1492")
                         select_choice(1, 0)
                         copy_tool("Эффективный IP MTU: 1492", "повторно не вычитается")
-                        checks.append("MTU layers: dot1q frame 1522, PPPoE payload and known IP MTU without double subtraction")
+                        checks.append(
+                            "MTU layers: dot1q frame 1522, PPPoE payload and known IP MTU without double subtraction"
+                        )
                         focus_control(7)
                         keys(0x20)
                         select_choice(6, 0)
                         paste("1500")
-                        for profile, mss in ((1, "1440"), (2, "1436"), (3, "1400"),
-                                             (4, "1410"), (5, "1406"), (6, "1408"), (7, "1388")):
+                        for profile, mss in (
+                            (1, "1440"),
+                            (2, "1436"),
+                            (3, "1400"),
+                            (4, "1410"),
+                            (5, "1406"),
+                            (6, "1408"),
+                            (7, "1388"),
+                        ):
                             select_choice(3, profile)
                             copy_tool(f"TCP MSS: {mss}", "Размер кадра включает FCS")
                         save_screenshot(hwnd, Path("smoke-results/mtu-profiles-night.png"))
-                        checks.append("MTU EXE presets: IP-in-IP, GRE, WireGuard, VXLAN, ESP, OpenVPN UDP AEAD and L2TP/IPsec")
+                        checks.append(
+                            "MTU EXE presets: IP-in-IP, GRE, WireGuard, VXLAN, ESP, OpenVPN UDP AEAD and L2TP/IPsec"
+                        )
 
                         keys(0x11, ord("4"))
                         copy_tool("[LPM] 10.20.30.0/24  access")
@@ -688,11 +703,15 @@ def run_ui_checks(binary: Path) -> tuple[list[str], list[dict]]:
                         )
 
                         keys(0x11, ord("5"))
-                        copy_tool("запрос и ответ разрешены", "198.51.100.20:443 -> 192.0.2.10:53000")
+                        copy_tool(
+                            "запрос и ответ разрешены", "198.51.100.20:443 -> 192.0.2.10:53000"
+                        )
                         save_screenshot(hwnd, Path("smoke-results/acl-request-reply-night.png"))
                         paste_control(8, "10 deny ip any any")
                         copy_tool("БЛОКИРУЕТСЯ: sequence 10, строка 1", "ACL блокируют")
-                        checks.append("ACL EXE: request/reply address and port reversal; reply deny identifies exact rule")
+                        checks.append(
+                            "ACL EXE: request/reply address and port reversal; reply deny identifies exact rule"
+                        )
                         paste_control(8, "")
                         paste_control(6, "permit tcp any any eq 80")
                         copy_tool("Неявный deny", "обратный поток не проверен")
@@ -702,7 +721,9 @@ def run_ui_checks(binary: Path) -> tuple[list[str], list[dict]]:
                         paste_control(6, "permit tcp any eq 53000 any eq 443\npermit ip any any")
                         paste_control(3, "")
                         copy_tool("НЕДОСТАТОЧНО ДАННЫХ", "Неизвестен порт источника")
-                        checks.append("ACL EXE: sequence order and unknown source port do not produce false permit")
+                        checks.append(
+                            "ACL EXE: sequence order and unknown source port do not produce false permit"
+                        )
                         paste_control(6, "permit ip any any\npermit tcp any any time-range DAY")
                         time.sleep(0.3)  # Allow the 180-ms editor debounce to finish.
                         assert_invalid_copy()
@@ -712,7 +733,9 @@ def run_ui_checks(binary: Path) -> tuple[list[str], list[dict]]:
                         assert_invalid_copy()
                         paste("192.0.2.10")
                         copy_tool("запрос разрешён")
-                        checks.append("ACL EXE: unsupported conditions and invalid flow clear stale output and recover")
+                        checks.append(
+                            "ACL EXE: unsupported conditions and invalid flow clear stale output and recover"
+                        )
                         # These are disposable test secrets; never print or capture them unmasked.
                         keys(0x11, ord("6"))
                         password_test_started = True
@@ -804,7 +827,11 @@ def run_ui_checks(binary: Path) -> tuple[list[str], list[dict]]:
                             if tool == 4:
                                 assert "10.20.30.0/24" in help_text and "[LPM]" in help_text
                             elif tool == 5:
-                                assert "permit/deny" in help_text and "ACL ответа" in help_text and "0.0.255.254" in help_text
+                                assert (
+                                    "permit/deny" in help_text
+                                    and "ACL ответа" in help_text
+                                    and "0.0.255.254" in help_text
+                                )
                             save_screenshot(help_hwnd, Path(f"smoke-results/help-tool-{tool}.png"))
                             keys(0x1B)  # Escape.
                             wait_until(lambda: not user32.IsWindowVisible(help_hwnd))

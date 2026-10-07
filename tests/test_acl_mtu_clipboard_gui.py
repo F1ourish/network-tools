@@ -77,9 +77,17 @@ def test_acl_udp_ignores_tcp_established_and_wildcard_tool_is_collapsible(app):
     assert app.acl_table.values["Совпадение"].get() == "Не совпадает"
 
 
-@pytest.mark.parametrize("profile,mss", [("GRE", "1436"), ("WireGuard", "1400"),
-                                         ("VXLAN", "1410"), ("IPsec ESP", "1406"),
-                                         ("OpenVPN UDP AEAD", "1408"), ("L2TP/IPsec", "1388")])
+@pytest.mark.parametrize(
+    "profile,mss",
+    [
+        ("GRE", "1436"),
+        ("WireGuard", "1400"),
+        ("VXLAN", "1410"),
+        ("IPsec ESP", "1406"),
+        ("OpenVPN UDP AEAD", "1408"),
+        ("L2TP/IPsec", "1388"),
+    ],
+)
 def test_mtu_profiles_and_copy_explanation(app, profile, mss):
     app.mtu_profile.set(profile)
     assert app.mss_table.values["TCP MSS"].get() == mss
@@ -105,10 +113,15 @@ def test_mtu_layer_selection_vlan_pppoe_and_invalid_clear(app):
     assert all(button.instate(["disabled"]) for button in app.mss_table.buttons.values())
 
 
-@pytest.mark.parametrize("field,value", [("input_entry", "00112233aabb"),
-                                         ("route_entry", "203.0.113.8"),
-                                         ("acl_entry", "203.0.113.10"),
-                                         ("acl_destination_entry", "203.0.113.20")])
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("input_entry", "00112233aabb"),
+        ("route_entry", "203.0.113.8"),
+        ("acl_entry", "203.0.113.10"),
+        ("acl_destination_entry", "203.0.113.20"),
+    ],
+)
 def test_paste_button_replaces_single_line_field(app, field, value):
     entry = getattr(app, field)
     clipboard(app, value + "\r\n")

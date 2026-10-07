@@ -37,6 +37,18 @@ jobs:
           mkdir -p /tmp/candidate-format
           cp -R src tests scripts packaging /tmp/candidate-format/
           python -m ruff format /tmp/candidate-format
+          python - <<'PYTOOLS'
+          import pathlib, shutil, site
+          packages = pathlib.Path(site.getsitepackages()[0])
+          destination = pathlib.Path('/tmp/candidate-format/tools')
+          destination.mkdir()
+          for path in packages.iterdir():
+              if path.name.startswith(('ruff', 'pytest', '_pytest', 'pluggy', 'iniconfig', 'packaging', 'pygments')):
+                  if path.is_dir():
+                      shutil.copytree(path, destination / path.name)
+                  else:
+                      shutil.copy2(path, destination / path.name)
+          PYTOOLS
           tar -czf candidate-format.tar.gz -C /tmp/candidate-format .
       - name: Upload candidate formatting
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a

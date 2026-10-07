@@ -6,17 +6,58 @@ import re
 
 from .network import InvalidNetworkInput, ipv4_address
 
-PROTOCOLS = {"icmp": 1, "igmp": 2, "ipinip": 4, "tcp": 6, "udp": 17,
-             "gre": 47, "esp": 50, "ahp": 51, "eigrp": 88, "ospf": 89, "pim": 103}
-PORTS = {"ftp-data": 20, "ftp": 21, "ssh": 22, "telnet": 23, "smtp": 25,
-         "domain": 53, "bootps": 67, "bootpc": 68, "tftp": 69, "www": 80,
-         "http": 80, "pop3": 110, "ntp": 123, "imap": 143, "snmp": 161,
-         "snmptrap": 162, "bgp": 179, "https": 443, "isakmp": 500,
-         "syslog": 514, "ldaps": 636, "non500-isakmp": 4500}
+PROTOCOLS = {
+    "icmp": 1,
+    "igmp": 2,
+    "ipinip": 4,
+    "tcp": 6,
+    "udp": 17,
+    "gre": 47,
+    "esp": 50,
+    "ahp": 51,
+    "eigrp": 88,
+    "ospf": 89,
+    "pim": 103,
+}
+PORTS = {
+    "ftp-data": 20,
+    "ftp": 21,
+    "ssh": 22,
+    "telnet": 23,
+    "smtp": 25,
+    "domain": 53,
+    "bootps": 67,
+    "bootpc": 68,
+    "tftp": 69,
+    "www": 80,
+    "http": 80,
+    "pop3": 110,
+    "ntp": 123,
+    "imap": 143,
+    "snmp": 161,
+    "snmptrap": 162,
+    "bgp": 179,
+    "https": 443,
+    "isakmp": 500,
+    "syslog": 514,
+    "ldaps": 636,
+    "non500-isakmp": 4500,
+}
 OPERATORS = {"eq", "neq", "lt", "gt", "range"}
-ICMP_NAMES = {"echo", "echo-reply", "unreachable", "time-exceeded", "redirect",
-              "timestamp-request", "timestamp-reply", "information-request",
-              "information-reply", "mask-request", "mask-reply", "packet-too-big"}
+ICMP_NAMES = {
+    "echo",
+    "echo-reply",
+    "unreachable",
+    "time-exceeded",
+    "redirect",
+    "timestamp-request",
+    "timestamp-reply",
+    "information-request",
+    "information-reply",
+    "mask-request",
+    "mask-reply",
+    "packet-too-big",
+}
 
 
 def port_number(text: str) -> int:
@@ -71,26 +112,45 @@ class Flow:
                 raise InvalidNetworkInput("Порты должны быть от 0 до 65535.")
 
     def reverse(self):
-        return Flow(self.destination, self.source, self.protocol,
-                    self.destination_port, self.source_port, self.protocol == 6)
+        return Flow(
+            self.destination,
+            self.source,
+            self.protocol,
+            self.destination_port,
+            self.source_port,
+            self.protocol == 6,
+        )
 
     def text(self):
-        return (f"{'TCP' if self.protocol == 6 else 'UDP'} "
-                f"{self.source}:{self.source_port if self.source_port is not None else '?'} -> "
-                f"{self.destination}:{self.destination_port if self.destination_port is not None else '?'}"
-                + (f"; ACK/RST={'1' if self.ack_or_rst else '0'}" if self.protocol == 6 else ""))
+        return (
+            f"{'TCP' if self.protocol == 6 else 'UDP'} "
+            f"{self.source}:{self.source_port if self.source_port is not None else '?'} -> "
+            f"{self.destination}:{self.destination_port if self.destination_port is not None else '?'}"
+            + (f"; ACK/RST={'1' if self.ack_or_rst else '0'}" if self.protocol == 6 else "")
+        )
 
 
-def make_flow(source: str, destination: str, protocol: str, source_port: str,
-              destination_port: str, ack_or_rst=False) -> Flow:
+def make_flow(
+    source: str,
+    destination: str,
+    protocol: str,
+    source_port: str,
+    destination_port: str,
+    ack_or_rst=False,
+) -> Flow:
     number = {"TCP": 6, "UDP": 17}.get(protocol.upper())
     if number is None:
         raise InvalidNetworkInput("Выберите TCP или UDP.")
     if not destination_port.strip():
         raise InvalidNetworkInput("Укажите порт назначения.")
-    return Flow(ipv4_address(source), ipv4_address(destination), number,
-                port_number(source_port.strip()) if source_port.strip() else None,
-                port_number(destination_port.strip()), bool(ack_or_rst))
+    return Flow(
+        ipv4_address(source),
+        ipv4_address(destination),
+        number,
+        port_number(source_port.strip()) if source_port.strip() else None,
+        port_number(destination_port.strip()),
+        bool(ack_or_rst),
+    )
 
 
 @dataclass(frozen=True)
@@ -114,8 +174,10 @@ class Rule:
         if self.established and not flow.ack_or_rst:
             return False, ""
         missing = []
-        for label, condition, port in (("источника", self.source_port, flow.source_port),
-                                      ("назначения", self.destination_port, flow.destination_port)):
+        for label, condition, port in (
+            ("источника", self.source_port, flow.source_port),
+            ("назначения", self.destination_port, flow.destination_port),
+        ):
             if condition is None:
                 continue
             if port is None:
@@ -237,8 +299,14 @@ def parse_acl(value: str) -> Acl:
             tokens = _Tokens(words)
             action = tokens.take()
             if action not in ("permit", "deny"):
-                raise InvalidNetworkInput("Ожидается permit/deny; неподдерживаемые команды не пропускаются.")
-            inferred = "extended" if tokens.peek() == "ip" or tokens.peek() in PROTOCOLS or tokens.peek().isdigit() else "standard"
+                raise InvalidNetworkInput(
+                    "Ожидается permit/deny; неподдерживаемые команды не пропускаются."
+                )
+            inferred = (
+                "extended"
+                if tokens.peek() == "ip" or tokens.peek() in PROTOCOLS or tokens.peek().isdigit()
+                else "standard"
+            )
             rule_kind = kind or inferred
             if kind is None:
                 kind = rule_kind
@@ -272,12 +340,26 @@ def parse_acl(value: str) -> Acl:
             if tokens.peek() in ("log", "log-input"):
                 tokens.take()
             if tokens.peek():
-                raise InvalidNetworkInput(f"Неподдерживаемое условие '{tokens.peek()}'; результат не вычисляется.")
+                raise InvalidNetworkInput(
+                    f"Неподдерживаемое условие '{tokens.peek()}'; результат не вычисляется."
+                )
             numbered.add(sequence is not None)
             if len(numbered) > 1:
                 raise InvalidNetworkInput("Не смешивайте правила с sequence number и без него.")
-            rules.append(Rule(action, protocol, source, destination, source_port,
-                              destination_port, established, line, sequence, raw.strip()))
+            rules.append(
+                Rule(
+                    action,
+                    protocol,
+                    source,
+                    destination,
+                    source_port,
+                    destination_port,
+                    established,
+                    line,
+                    sequence,
+                    raw.strip(),
+                )
+            )
         except (InvalidNetworkInput, IndexError) as error:
             raise InvalidNetworkInput(f"Строка {line}: {error}") from None
     if not rules:
@@ -298,8 +380,7 @@ class Decision:
         if self.rule is None:
             return f"{title}: {self.reason}"
         label = f"sequence {self.rule.sequence}, " if self.rule.sequence is not None else ""
-        return (f"{title}: {label}строка {self.rule.line}\n"
-                f"  {self.rule.original}\n  {self.reason}")
+        return f"{title}: {label}строка {self.rule.line}\n  {self.rule.original}\n  {self.reason}"
 
 
 def evaluate_acl(acl: Acl, flow: Flow) -> Decision:
@@ -319,9 +400,13 @@ def check_conversation(forward_value: str, reverse_value: str, flow: Flow) -> st
     lines = [f"Запрос: {flow.text()}", request.text(), ""]
     if reverse_acl is None:
         lines.append("Ответ: ACL не задан, обратный поток не проверен.")
-        lines.append({True: "Вывод: запрос разрешён указанной ACL.",
-                      False: "Вывод: запрос блокируется указанной ACL.",
-                      None: "Вывод: для проверки запроса недостаточно данных."}[request.allowed])
+        lines.append(
+            {
+                True: "Вывод: запрос разрешён указанной ACL.",
+                False: "Вывод: запрос блокируется указанной ACL.",
+                None: "Вывод: для проверки запроса недостаточно данных.",
+            }[request.allowed]
+        )
     else:
         reply = flow.reverse()
         response = evaluate_acl(reverse_acl, reply)
@@ -332,6 +417,8 @@ def check_conversation(forward_value: str, reverse_value: str, flow: Flow) -> st
             lines.append("Вывод: запрос и ответ разрешены указанными ACL.")
         else:
             lines.append("Вывод: для двусторонней проверки недостаточно данных.")
-    lines.append("Проверены только эти ACL: без NAT, маршрутизации, stateful firewall и фрагментов. "
-                 "TCP-ответ моделируется с ACK=1; established не является отслеживанием соединения.")
+    lines.append(
+        "Проверены только эти ACL: без NAT, маршрутизации, stateful firewall и фрагментов. "
+        "TCP-ответ моделируется с ACK=1; established не является отслеживанием соединения."
+    )
     return "\n".join(lines)
