@@ -929,8 +929,14 @@ class MacConverterApp:
         editor.grid(row=1, column=0, sticky="nsew", padx=12)
         editor.set_text(self.acl_inputs[index].get("1.0", "end-1c"))
         self._acl_editor_windows[index] = (window, editor)
+        ttk.Label(
+            window,
+            textvariable=self.acl_flow_error,
+            wraplength=max(500, self.root.winfo_screenwidth() - 100),
+            bootstyle="danger",
+        ).grid(row=2, column=0, sticky="ew", padx=12, pady=(6, 0))
         controls = ttk.Frame(window, padding=12)
-        controls.grid(row=2, column=0, sticky="ew")
+        controls.grid(row=3, column=0, sticky="ew")
         ttk.Button(
             controls, text="Вставить ACL", command=lambda: self._paste(editor.text, replace=True)
         ).pack(side="left")

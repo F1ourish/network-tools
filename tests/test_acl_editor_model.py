@@ -51,6 +51,9 @@ def test_both_absent_is_explicit_and_differs_from_empty_unchecked_reply():
     assert "ACL в обоих направлениях не назначены" in report
     assert "обратный поток не проверен" not in report
     assert "обратный поток не проверен" in check_conversation("permit ip any any", "", flow)
+    request_absent = check_conversation("ignored", "", flow, forward_absent=True)
+    assert "Вывод: ACL запроса не назначена; обратный поток не проверен." in request_absent
+    assert "разрешён указанной ACL" not in request_absent
 
 
 def test_absence_in_one_direction_does_not_override_deny_in_other():

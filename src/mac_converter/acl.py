@@ -448,7 +448,9 @@ def check_conversation(
     if reverse_acl is None and not reverse_absent:
         lines.append("Ответ: ACL не задан, обратный поток не проверен.")
         lines.append(
-            {
+            "Вывод: ACL запроса не назначена; обратный поток не проверен."
+            if forward_absent
+            else {
                 True: "Вывод: запрос разрешён указанной ACL.",
                 False: "Вывод: запрос блокируется указанной ACL.",
                 None: "Вывод: для проверки запроса недостаточно данных.",

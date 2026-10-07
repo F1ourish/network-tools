@@ -294,6 +294,8 @@ def run_ui_checks(binary: Path) -> tuple[list[str], list[dict]]:
             # Retry the user action once the new report becomes available.
             keys(0x11, 0x10, ord("C"))
             value = read_clipboard()
+            if value:
+                value = value.replace("\r\n", "\n")
             return value if value and all(fragment in value for fragment in fragments) else None
 
         return wait_until(matching_report)
@@ -768,6 +770,13 @@ def run_ui_checks(binary: Path) -> tuple[list[str], list[dict]]:
                             "РАЗРЕШЁН: sequence 10, строка 1", "\n  10 permit ip any any\n"
                         )
                         assert "matches" not in clean_report and "(1 match)" not in clean_report
+                        focus_control(7)
+                        keys(0x11, ord("A"))
+                        keys(0x11, ord("C"))
+                        wait_until(
+                            lambda: (read_clipboard() or "").replace("\r\n", "\n")
+                            == "10 permit ip any any\n20 deny ip any any"
+                        )
                         checks.append(
                             "ACL EXE: Ctrl+V trims each line and removes Cisco match counters"
                         )
@@ -778,9 +787,13 @@ def run_ui_checks(binary: Path) -> tuple[list[str], list[dict]]:
                         )
                         user32.SetForegroundWindow(expanded)
                         keys(0x11, ord("A"))
-                        write_clipboard("  10 permit ip any any (2 matches)  ")
+                        write_clipboard("  42 permit ip any any (2 matches)  ")
                         keys(0x11, ord("V"))
                         time.sleep(0.3)
+                        keys(0x11, ord("A"))
+                        keys(0x11, ord("C"))
+                        wait_until(lambda: read_clipboard() == "42 permit ip any any")
+                        keys(0x27)
                         save_screenshot(expanded, Path("smoke-results/acl-expanded-night.png"))
                         keys(0x1B)
                         wait_until(
@@ -789,13 +802,35 @@ def run_ui_checks(binary: Path) -> tuple[list[str], list[dict]]:
                             )
                         )
                         user32.SetForegroundWindow(hwnd)
-                        copy_tool("РАЗРЕШЁН: sequence 10, строка 1", "\n  10 permit ip any any\n")
+                        copy_tool("РАЗРЕШЁН: sequence 42, строка 1", "\n  42 permit ip any any\n")
                         checks.append(
                             "ACL EXE: large editor opens, accepts clean paste and keeps edits on Escape"
                         )
-                        paste_control(7, "200 permit udp object-group CONFERENCE_NET eq 8801 any")
+                        paste_control(
+                            7,
+                            "\n".join(
+                                ["! preserved line"] * 18
+                                + ["200 permit udp object-group CONFERENCE_NET eq 8801 any"]
+                            ),
+                        )
                         time.sleep(0.3)
                         assert_invalid_copy()
+                        focus_control(9)
+                        keys(0x20)
+                        expanded = wait_until(
+                            lambda: find_window(isolated.resolve(), "ACL запроса - Network Tools")
+                        )
+                        user32.SetForegroundWindow(expanded)
+                        save_screenshot(
+                            expanded, Path("smoke-results/acl-error-expanded-night.png")
+                        )
+                        keys(0x1B)
+                        wait_until(
+                            lambda: not find_window(
+                                isolated.resolve(), "ACL запроса - Network Tools"
+                            )
+                        )
+                        user32.SetForegroundWindow(hwnd)
                         focus_control(10)
                         keys(0x20)
                         copy_tool("ACL запроса явно не назначена", "обратный поток не проверен")
