@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import pytest
 
 
@@ -17,6 +19,11 @@ def tk_runtime(request):
         if request.config.getoption("--require-gui"):
             pytest.fail(f"A Tk desktop is required: {error}")
         pytest.skip("No Tk desktop; use Windows or Xvfb to run GUI checks")
+    # Preload the actual Tk focus definitions rather than deferring their file I/O
+    # to tk_focusNext after dozens of short-lived Windows test windows.
+    # Python reads the same installed script; all focus-order assertions stay intact.
+    focus_script = Path(root.tk.eval("set tk_library")) / "focus.tcl"
+    root.tk.eval(focus_script.read_text(encoding="utf-8"))
     root.withdraw()
     yield root
     root.destroy()
