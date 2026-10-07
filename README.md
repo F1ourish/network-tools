@@ -44,12 +44,24 @@ ACL запросов/ответов и генератор паролей. Шес
 
 ## Интерфейс
 
-Снимки готового EXE 1.3.0 доступны в [успешной Windows-проверке](https://github.com/F1ourish/network-tools/actions/runs/37611845777)
-(artifact verification). Ниже сохранены снимки версии 1.2.0:
+Снимки опубликованного EXE 1.3.0 из [проверки на Windows](https://github.com/F1ourish/network-tools/actions/runs/37612881211).
+Источник снимков: [описание](docs/screenshots/README.md).
 
-![Генератор паролей, ночная тема](docs/screenshots/passwords-1.2.0.png)
+Проверка ACL запроса и ответа:
 
-![Справка по ACL версии 1.2.0](docs/screenshots/help-acl-1.2.0.png)
+![ACL запроса и ответа, версия 1.3.0, ночная тема](docs/screenshots/acl-request-reply-1.3.0.png)
+
+Расчёт MTU/MSS с профилем L2TP/IPsec:
+
+![MTU/MSS с профилем L2TP/IPsec, версия 1.3.0, ночная тема](docs/screenshots/mtu-profiles-1.3.0.png)
+
+Генератор паролей:
+
+![Генератор паролей, версия 1.3.0, ночная тема](docs/screenshots/passwords-1.3.0.png)
+
+Контекстная справка по ACL:
+
+![Справка по ACL, версия 1.3.0](docs/screenshots/help-acl-1.3.0.png)
 
 ## Использование
 
@@ -154,14 +166,17 @@ py -3.12 -m venv .venv
 Linux проверяет логику командой `python -m pytest -q -m "not gui"`.
 Без Tk-дисплея обычный pytest пропускает GUI; `--require-gui` запрещает такой пропуск.
 
-Кандидат 1.3.0 прошёл **480 тестов без ошибок и пропусков** (398 без GUI, 82 GUI)
-и **44 проверки готового EXE** на Windows Server 2025 от стандартного пользователя.
-Проверены оба направления ACL, порядок правил и implicit deny, неизвестный порт,
-все профили MTU, VLAN/PPPoE, вставка и русская раскладка Windows.
-[Успешный прогон](https://github.com/F1ourish/network-tools/actions/runs/37611845777) относится к commit `2a1bfa0e5b67d28cf2f5ae1496d4ad177b9a24a6`.
-Перед публикацией CI повторяет все проверки и сборку для точного commit релиза.
+Опубликованная версия 1.3.0 прошла **480 тестов без ошибок и пропусков**
+(398 без GUI, 82 GUI) и **44 проверки готового EXE** на Windows Server 2025
+от стандартного пользователя. Проверены оба направления ACL, порядок правил и
+implicit deny, неизвестный порт, все профили MTU, VLAN/PPPoE, вставка и русская раскладка.
+[Проверка релиза](https://github.com/F1ourish/network-tools/actions/runs/37612881211)
+относится к исходному commit `875c31a6c9d34fc683faac23f64c643b700a1c37`,
+из которого собраны опубликованные EXE и ZIP.
 Фактические числа тестов, исходный commit и среда находятся в
-`RELEASE_VERIFICATION.json` релиза; контрольные суммы - в `SHA256SUMS.txt`.
+[`RELEASE_VERIFICATION.json`](https://github.com/F1ourish/network-tools/releases/download/v1.3.0/RELEASE_VERIFICATION.json);
+контрольные суммы - в
+[`SHA256SUMS.txt`](https://github.com/F1ourish/network-tools/releases/download/v1.3.0/SHA256SUMS.txt).
 
 [Процедура выпуска](docs/BUILD_AND_RELEASE.md), [архитектура](docs/ARCHITECTURE.md),
 [клиентская проверка](docs/TESTING.md). Целевая среда - Windows 10/11 x64;

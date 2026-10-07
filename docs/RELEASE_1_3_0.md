@@ -22,13 +22,15 @@
 
 ### Проверка
 
-Кандидат прошёл **480 тестов без ошибок и пропусков** (398 без GUI, 82 GUI) и
-**44 проверки готового EXE** на Windows Server 2025 от стандартного пользователя.
-Проверены оба направления ACL, первый match/implicit deny, ошибки и неизвестный порт,
-все профили MTU, VLAN/PPPoE, вставка, русская раскладка и перезапуск.
-[Успешный CI](https://github.com/F1ourish/network-tools/actions/runs/37611845777); commit `2a1bfa0e5b67d28cf2f5ae1496d4ad177b9a24a6`.
-Перед публикацией CI повторяет проверки для точного commit релиза. SHA-256,
-исходный commit и среда - в `RELEASE_VERIFICATION.json`. Процедура: `docs/BUILD_AND_RELEASE.md`.
+Опубликованная сборка прошла **480 тестов без ошибок и пропусков**
+(398 без GUI, 82 GUI) и **44 проверки готового EXE** на Windows Server 2025
+от стандартного пользователя. Проверены оба направления ACL, первый match/implicit deny,
+ошибки и неизвестный порт, все профили MTU, VLAN/PPPoE, вставка, русская раскладка и перезапуск.
+[CI опубликованного релиза](https://github.com/F1ourish/network-tools/actions/runs/37612881211);
+исходный commit `875c31a6c9d34fc683faac23f64c643b700a1c37`.
+EXE и ZIP собраны из этого commit; контрольные суммы и исходный commit подтверждены
+в `RELEASE_VERIFICATION.json` и `SHA256SUMS.txt`.
+[Подробный отчёт](https://github.com/F1ourish/network-tools/blob/main/docs/VALIDATION_1_3_0.md).
 
 ACL проверяет только введённые списки, без NAT, маршрутизации, stateful firewall
 и фрагментов. TCP-ответ моделируется с ACK=1. MTU пути не измеряется; параметры

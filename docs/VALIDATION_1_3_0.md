@@ -1,7 +1,9 @@
 # Проверка Network Tools 1.3.0
 
-Дата: 07.10.2026. Кандидат: `2a1bfa0e5b67d28cf2f5ae1496d4ad177b9a24a6`.
-[GitHub Actions run 37611845777](https://github.com/F1ourish/network-tools/actions/runs/37611845777) завершён успешно.
+Дата: 07.10.2026. Опубликован [релиз v1.3.0](https://github.com/F1ourish/network-tools/releases/tag/v1.3.0).
+Исходный commit: `875c31a6c9d34fc683faac23f64c643b700a1c37`.
+[GitHub Actions run 37612881211](https://github.com/F1ourish/network-tools/actions/runs/37612881211)
+завершён успешно; EXE и ZIP релиза получены из этого прогона.
 
 | Проверка | Результат |
 | --- | --- |
@@ -31,10 +33,25 @@
 
 ## Поставка
 
-Релиз публикуется только после повторной успешной проверки точного release commit.
-Publisher сверяет version/commit/passed и SHA-256 EXE/ZIP/verification report.
-Точные данные опубликованной сборки находятся в `RELEASE_VERIFICATION.json`,
-контрольные суммы - в `SHA256SUMS.txt`. Имя EXE `MacAddressConverter.exe` сохранено.
+Опубликованы отдельный EXE, portable ZIP,
+[`RELEASE_VERIFICATION.json`](https://github.com/F1ourish/network-tools/releases/download/v1.3.0/RELEASE_VERIFICATION.json)
+и [`SHA256SUMS.txt`](https://github.com/F1ourish/network-tools/releases/download/v1.3.0/SHA256SUMS.txt).
+Publisher сверил version/commit/passed и SHA-256 перед публикацией.
+Имя EXE `MacAddressConverter.exe` сохранено.
+
+Дополнительно скачаны артефакты финального CI. EXE извлечён из portable ZIP;
+SHA-256 EXE, ZIP, отчёта и файла контрольных сумм совпадают с digest в метаданных GitHub Release.
+Отчёт внутри ZIP совпадает с отдельным отчётом; pytest XML подтверждает 480 тестов
+без ошибок и пропусков, smoke JSON - успешное выполнение 44 проверок EXE.
+
+| Файл | SHA-256 |
+| --- | --- |
+| `MacAddressConverter.exe` | `ee3bd385a0a91e07f30c93ce4d2fe2321da818fd616e1d722c17827b165fdcf0` |
+| `NetworkTools-1.3.0-windows-x64.zip` | `57f64642df08c6a7f69eb317bce506eda07c0757282ea81be273a15810b0271e` |
+| `RELEASE_VERIFICATION.json` | `90a8379d633a083f237190066387972805f9f3b1c02f56b22288f1c49c2ce0f5` |
+| `SHA256SUMS.txt` | `2b4afc28299ab9548d73f535e19c01daf4909d028e38c236f665c720357b94e8` |
+
+Снимки интерфейса из этого же прогона сохранены в [docs/screenshots](screenshots/README.md).
 
 Целевая среда Windows 10/11 x64. Клиентские версии Windows, DPI 125-200%,
 Defender/SmartScreen и корпоративные политики требуют отдельной приёмки.
