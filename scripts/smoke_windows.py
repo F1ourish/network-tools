@@ -272,12 +272,15 @@ def run_ui_checks(binary: Path) -> tuple[list[str], list[dict]]:
 
     def copy_tool(*fragments):
         write_clipboard("tool copy sentinel")
-        keys(0x11, 0x10, ord("C"))
-        return wait_until(
-            lambda: value
-            if (value := read_clipboard()) and all(fragment in value for fragment in fragments)
-            else None
-        )
+
+        def matching_report():
+            # Editors invalidate old reports immediately, then debounce parsing.
+            # Retry the user action once the new report becomes available.
+            keys(0x11, 0x10, ord("C"))
+            value = read_clipboard()
+            return value if value and all(fragment in value for fragment in fragments) else None
+
+        return wait_until(matching_report)
 
     def paste_control(tab_count, value):
         focus_control(tab_count)
