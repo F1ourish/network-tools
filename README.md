@@ -4,10 +4,10 @@
 ACL запросов/ответов и генератор паролей. Шесть вкладок, дневная и ночная темы, расчёт при вводе и
 копирование результатов. Для готового EXE установка Python не требуется.
 
-[Скачать релиз v1.3.0](https://github.com/F1ourish/network-tools/releases/tag/v1.3.0).
+[Скачать релиз v1.3.1](https://github.com/F1ourish/network-tools/releases/tag/v1.3.1).
 В ZIP находятся EXE, краткая инструкция, лицензии и отчёт проверки.
 Отдельно доступны EXE и `SHA256SUMS.txt`. Итоги проверки -
-[отчёт проверки](docs/VALIDATION_1_3_0.md).
+[отчёт проверки](docs/VALIDATION_1_3_1.md).
 
 ## Возможности
 
@@ -65,7 +65,9 @@ ACL запросов/ответов и генератор паролей. Шес
 
 ## Использование
 
-Распаковать ZIP в пользовательский каталог и запустить `MacAddressConverter.exe`.
+Распаковать ZIP в пользовательский каталог и запустить `NetworkTools.exe`.
+С версии 1.3.1 EXE называется `NetworkTools.exe`; существующие ярлыки и скрипты
+запуска следует направить на новый файл.
 Можно переносить один EXE. Приложение не устанавливает драйверы или службы.
 Выбрать вкладку и ввести значения: результат обновляется сразу. При ошибке
 старые значения очищаются, копирование отключается. Readonly-поля позволяют
@@ -166,17 +168,13 @@ py -3.12 -m venv .venv
 Linux проверяет логику командой `python -m pytest -q -m "not gui"`.
 Без Tk-дисплея обычный pytest пропускает GUI; `--require-gui` запрещает такой пропуск.
 
-Опубликованная версия 1.3.0 прошла **480 тестов без ошибок и пропусков**
-(398 без GUI, 82 GUI) и **44 проверки готового EXE** на Windows Server 2025
-от стандартного пользователя. Проверены оба направления ACL, порядок правил и
-implicit deny, неизвестный порт, все профили MTU, VLAN/PPPoE, вставка и русская раскладка.
-[Проверка релиза](https://github.com/F1ourish/network-tools/actions/runs/37612881211)
-относится к исходному commit `875c31a6c9d34fc683faac23f64c643b700a1c37`,
-из которого собраны опубликованные EXE и ZIP.
+Результаты проверок версии 1.3.1 фиксируются в
+[отчёте проверки](docs/VALIDATION_1_3_1.md). Полный набор pytest и запуск готового
+EXE выполняются на Windows; CI публикует только проверенную сборку.
 Фактические числа тестов, исходный commit и среда находятся в
-[`RELEASE_VERIFICATION.json`](https://github.com/F1ourish/network-tools/releases/download/v1.3.0/RELEASE_VERIFICATION.json);
+[`RELEASE_VERIFICATION.json`](https://github.com/F1ourish/network-tools/releases/download/v1.3.1/RELEASE_VERIFICATION.json);
 контрольные суммы - в
-[`SHA256SUMS.txt`](https://github.com/F1ourish/network-tools/releases/download/v1.3.0/SHA256SUMS.txt).
+[`SHA256SUMS.txt`](https://github.com/F1ourish/network-tools/releases/download/v1.3.1/SHA256SUMS.txt).
 
 [Процедура выпуска](docs/BUILD_AND_RELEASE.md), [архитектура](docs/ARCHITECTURE.md),
 [клиентская проверка](docs/TESTING.md). Целевая среда - Windows 10/11 x64;

@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.3.1 - 2026-10-07
+
+- Standalone EXE переименован в NetworkTools.exe; имя согласовано в ZIP, CI, SHA-256 и publisher.
+- Заголовок окна и свойства EXE Windows используют Network Tools.
+- Добавлена нативная проверка имени EXE и Windows OriginalFilename/InternalName/ProductName/FileDescription.
+- Расчёты, ACL, буфер обмена, пароли и формат настройки темы сохраняют поведение 1.3.0.
+- Инструкции запуска обновлены; для старых ярлыков требуется выбрать новый EXE.
+
 ## 1.3.0 - 2026-10-07
 
 - MTU/MSS: явный IP/L2 budget, dot1q/QinQ, PPPoE без повторного вычитания,

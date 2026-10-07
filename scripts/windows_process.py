@@ -320,7 +320,7 @@ class LimitedProcess:
         milliseconds = 0xFFFFFFFF if timeout is None else int(timeout * 1000)
         result = kernel32.WaitForSingleObject(self.handle, milliseconds)
         if result == 258:
-            raise subprocess.TimeoutExpired("MacAddressConverter.exe", timeout)
+            raise subprocess.TimeoutExpired("NetworkTools.exe", timeout)
         if result != 0:
             raise ct.WinError(ct.get_last_error())
         code = wt.DWORD()

@@ -67,21 +67,21 @@ jobs:
       - name: Upload verified Windows EXE
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
-          name: MacAddressConverter-windows-x64-${{ github.ref_name }}
-          path: dist/MacAddressConverter.exe
+          name: NetworkTools-windows-x64-${{ github.ref_name }}
+          path: dist/NetworkTools.exe
           if-no-files-found: error
           retention-days: 30
       - name: Upload portable ZIP
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
-          name: MacAddressConverter-portable-${{ github.ref_name }}
+          name: NetworkTools-portable-${{ github.ref_name }}
           path: dist/NetworkTools-*-windows-x64.zip
           if-no-files-found: error
           retention-days: 30
       - name: Upload verification and screenshots
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
-          name: MacAddressConverter-verification-${{ github.ref_name }}
+          name: NetworkTools-verification-${{ github.ref_name }}
           path: |
             dist/SHA256SUMS.txt
             dist/RELEASE_VERIFICATION.json
@@ -92,7 +92,7 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
-          name: MacAddressConverter-smoke-diagnostics-${{ github.run_id }}
+          name: NetworkTools-smoke-diagnostics-${{ github.run_id }}
           path: smoke-results/
           if-no-files-found: ignore
           retention-days: 7
@@ -110,15 +110,15 @@ jobs:
           persist-credentials: false
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
-          name: MacAddressConverter-windows-x64-main
+          name: NetworkTools-windows-x64-main
           path: verified/dist
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
-          name: MacAddressConverter-portable-main
+          name: NetworkTools-portable-main
           path: verified/dist
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
-          name: MacAddressConverter-verification-main
+          name: NetworkTools-verification-main
           path: verified
       - name: Verify assets and publish the tested commit
         env:

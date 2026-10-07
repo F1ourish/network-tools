@@ -1,6 +1,6 @@
-Network Tools 1.3.0 - Windows x64
+Network Tools 1.3.1 - Windows x64
 
-Распаковать ZIP и запустить MacAddressConverter.exe.
+Распаковать ZIP и запустить NetworkTools.exe.
 Установка Python не требуется. Можно перенести один EXE в пользовательский каталог.
 
 MAC: 4 формата и выбор регистра.

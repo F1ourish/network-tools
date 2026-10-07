@@ -73,7 +73,7 @@ class OutputTable:
 class MacConverterApp:
     def __init__(self, root: tk.Misc, *, settings_path: Path | None = None) -> None:
         self.root = root
-        root.title(f"MAC Address Converter {__version__} - Network Tools")
+        root.title(f"Network Tools {__version__}")
         root.resizable(True, True)
         root.report_callback_exception = self._report_callback_error
         self.settings = ThemeSettings(settings_path)

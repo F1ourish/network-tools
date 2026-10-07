@@ -12,13 +12,13 @@ checked_assets = run_path(str(Path(__file__).resolve().parents[1] / "scripts/pub
 
 @pytest.fixture
 def release_assets(tmp_path):
-    binary = tmp_path / "MacAddressConverter.exe"
+    binary = tmp_path / "NetworkTools.exe"
     binary.write_bytes(b"tested windows exe")
-    (tmp_path / "NetworkTools-1.1.0-windows-x64.zip").write_bytes(b"portable zip")
+    (tmp_path / "NetworkTools-1.3.1-windows-x64.zip").write_bytes(b"portable zip")
     (tmp_path / "RELEASE_VERIFICATION.json").write_text(
         json.dumps(
             {
-                "version": "1.1.0",
+                "version": "1.3.1",
                 "commit": "checked-commit",
                 "smoke": {
                     "passed": True,
@@ -35,25 +35,25 @@ def release_assets(tmp_path):
 
 
 def test_publisher_accepts_complete_checked_assets(release_assets):
-    assets = checked_assets(release_assets, "1.1.0", "checked-commit")
+    assets = checked_assets(release_assets, "1.3.1", "checked-commit")
     assert {path.name for path in assets} == {
-        "MacAddressConverter.exe",
-        "NetworkTools-1.1.0-windows-x64.zip",
+        "NetworkTools.exe",
+        "NetworkTools-1.3.1-windows-x64.zip",
         "RELEASE_VERIFICATION.json",
         "SHA256SUMS.txt",
     }
 
 
-@pytest.mark.parametrize("version,commit", [("1.2.0", "checked-commit"), ("1.1.0", "other-commit")])
+@pytest.mark.parametrize("version,commit", [("1.3.0", "checked-commit"), ("1.3.1", "other-commit")])
 def test_publisher_rejects_different_source(release_assets, version, commit):
     with pytest.raises(ValueError, match="version or commit"):
         checked_assets(release_assets, version, commit)
 
 
 def test_publisher_rejects_modified_binary(release_assets):
-    (release_assets / "MacAddressConverter.exe").write_bytes(b"changed after test")
+    (release_assets / "NetworkTools.exe").write_bytes(b"changed after test")
     with pytest.raises(ValueError, match="Checksum mismatch"):
-        checked_assets(release_assets, "1.1.0", "checked-commit")
+        checked_assets(release_assets, "1.3.1", "checked-commit")
 
 
 def test_publisher_rejects_unverified_exe(release_assets):
@@ -62,7 +62,7 @@ def test_publisher_rejects_unverified_exe(release_assets):
     report["smoke"]["passed"] = False
     path.write_text(json.dumps(report))
     with pytest.raises(ValueError, match="did not pass"):
-        checked_assets(release_assets, "1.1.0", "checked-commit")
+        checked_assets(release_assets, "1.3.1", "checked-commit")
 
 
 def test_publisher_rejects_missing_or_unexpected_assets(release_assets):
@@ -70,7 +70,7 @@ def test_publisher_rejects_missing_or_unexpected_assets(release_assets):
     original = sums.read_text()
     sums.write_text(original.splitlines()[0] + "\n")
     with pytest.raises(ValueError, match="Missing"):
-        checked_assets(release_assets, "1.1.0", "checked-commit")
+        checked_assets(release_assets, "1.3.1", "checked-commit")
     sums.write_text(original + "0  ../unexpected.exe\n")
     with pytest.raises(ValueError, match="Unexpected"):
-        checked_assets(release_assets, "1.1.0", "checked-commit")
+        checked_assets(release_assets, "1.3.1", "checked-commit")

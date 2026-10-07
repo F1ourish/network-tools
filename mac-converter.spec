@@ -53,11 +53,12 @@ version_info = VSVersionInfo(
     kids=[
         StringFileInfo([
             StringTable("040904B0", [
-                StringStruct("FileDescription", "Network Tools - MAC and IPv4 utilities"),
+                StringStruct("FileDescription", "Network Tools"),
                 StringStruct("FileVersion", version),
                 StringStruct("ProductName", "Network Tools"),
                 StringStruct("ProductVersion", version),
-                StringStruct("OriginalFilename", "MacAddressConverter.exe"),
+                StringStruct("InternalName", "NetworkTools"),
+                StringStruct("OriginalFilename", "NetworkTools.exe"),
             ])
         ]),
         VarFileInfo([VarStruct("Translation", [1033, 1200])]),
@@ -73,7 +74,7 @@ a = Analysis(
 pyz = PYZ(a.pure)
 exe = EXE(
     pyz, a.scripts, a.binaries, a.datas, [],
-    name="MacAddressConverter", debug=False, bootloader_ignore_signals=False,
+    name="NetworkTools", debug=False, bootloader_ignore_signals=False,
     strip=False, upx=False, console=False, disable_windowed_traceback=True,
     manifest=str(root / "packaging" / "windows.manifest"), version=version_info,
     icon="NONE", uac_admin=False,

@@ -16,7 +16,7 @@ def checked_assets(directory: Path, expected_version: str, expected_commit: str)
     if verification["smoke"]["passed"] is not True:
         raise ValueError("Artifact did not pass EXE verification")
     expected_names = {
-        "MacAddressConverter.exe",
+        "NetworkTools.exe",
         f"NetworkTools-{expected_version}-windows-x64.zip",
         "RELEASE_VERIFICATION.json",
     }
@@ -30,7 +30,7 @@ def checked_assets(directory: Path, expected_version: str, expected_commit: str)
         entries[name] = digest
     if set(entries) != expected_names:
         raise ValueError("Missing release asset checksum")
-    if verification["smoke"]["sha256"] != entries["MacAddressConverter.exe"]:
+    if verification["smoke"]["sha256"] != entries["NetworkTools.exe"]:
         raise ValueError("Verified EXE hash does not match the release asset")
     return [directory / name for name in sorted(expected_names)] + [directory / "SHA256SUMS.txt"]
 

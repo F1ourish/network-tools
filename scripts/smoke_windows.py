@@ -56,6 +56,22 @@ def verify_binary(binary: Path) -> list[str]:
         assert actual_version == tuple(int(part) for part in __version__.split(".")) + (0,)
         checks.append(f"Windows version resource matches application {__version__}")
 
+        strings = {}
+        for info in pe.FileInfo:
+            for entry in info:
+                if entry.Key == b"StringFileInfo":
+                    for table in entry.StringTable:
+                        strings.update(table.entries)
+        assert binary.name == "NetworkTools.exe", "Unexpected EXE filename"
+        for key, expected in (
+            (b"OriginalFilename", b"NetworkTools.exe"),
+            (b"InternalName", b"NetworkTools"),
+            (b"ProductName", b"Network Tools"),
+            (b"FileDescription", b"Network Tools"),
+        ):
+            assert strings.get(key) == expected, f"Unexpected Windows resource: {key!r}"
+        checks.append("EXE filename and Windows name resources match Network Tools")
+
     names = {name.lower().replace("\\", "/") for name in CArchiveReader(str(binary)).toc}
     for required in (
         "python312.dll",
@@ -177,7 +193,7 @@ def run_ui_checks(binary: Path) -> tuple[list[str], list[dict]]:
     kernel32.CloseHandle.argtypes = [wt.HANDLE]
 
     owner = user32.CreateWindowExW(
-        0, "STATIC", "MAC converter smoke clipboard", 0, 0, 0, 1, 1, None, None, None, None
+        0, "STATIC", "Network Tools smoke clipboard", 0, 0, 0, 1, 1, None, None, None, None
     )
     if not owner:
         raise ct.WinError(ct.get_last_error())
@@ -322,7 +338,7 @@ def run_ui_checks(binary: Path) -> tuple[list[str], list[dict]]:
         keys(0x11, 0x10, ord("C"))
         assert read_clipboard() == "invalid tool sentinel", "Invalid tool copied a stale result"
 
-    def find_window(expected_path, title_prefix="MAC Address Converter "):
+    def find_window(expected_path, title_prefix="Network Tools "):
         matches = []
 
         @callback_type

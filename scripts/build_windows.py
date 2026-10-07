@@ -36,9 +36,9 @@ def main() -> int:
         cwd=root,
         check=True,
     )
-    binary = root / "dist" / "MacAddressConverter.exe"
+    binary = root / "dist" / "NetworkTools.exe"
     if not binary.is_file():
-        raise SystemExit("Build did not produce dist/MacAddressConverter.exe")
+        raise SystemExit("Build did not produce dist/NetworkTools.exe")
     subprocess.run(
         [sys.executable, str(root / "scripts" / "smoke_windows.py"), str(binary)],
         cwd=root,
