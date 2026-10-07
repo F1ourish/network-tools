@@ -1,4 +1,28 @@
-# Снимки Network Tools 1.3.0
+# Снимки Network Tools
+
+## Версия 1.4.0
+
+Снимки настоящего опубликованного `NetworkTools.exe` из
+[финального GitHub Actions run 37640205382](https://github.com/F1ourish/network-tools/actions/runs/37640205382).
+Источник - artifact `NetworkTools-verification-main`, папка `smoke-results`.
+Платформа - Windows-2025Server-10.0.26100-SP0; DPI 96, ночная тема.
+
+Source commit: `bc96f3bdc1ce0c335a438364d3517b93ce8d5a64`.
+SHA-256 EXE: `9f4640502b53e6ece4290c152b0cd8b4e6efc8eae85b62e29aa2ec4b1cbdb518`.
+
+| Файл в репозитории | Файл в артефакте |
+| --- | --- |
+| [acl-request-reply-1.4.0.png](acl-request-reply-1.4.0.png) | `smoke-results/acl-request-reply-night.png` |
+| [acl-expanded-1.4.0.png](acl-expanded-1.4.0.png) | `smoke-results/acl-expanded-night.png` |
+| [acl-error-expanded-1.4.0.png](acl-error-expanded-1.4.0.png) | `smoke-results/acl-error-expanded-night.png` |
+| [mtu-profiles-1.4.0.png](mtu-profiles-1.4.0.png) | `smoke-results/mtu-profiles-night.png` |
+| [passwords-1.4.0.png](passwords-1.4.0.png) | `smoke-results/passwords-night.png` |
+| [help-acl-1.4.0.png](help-acl-1.4.0.png) | `smoke-results/help-tool-5.png` |
+
+Пример object-group использует тестовую группу CONFERENCE_NET.
+В справке текст выделен для проверки копирования через Ctrl+A/C.
+
+## Версия 1.3.0
 
 Снимки получены из артефакта `MacAddressConverter-verification-main`
 [GitHub Actions run 37612881211](https://github.com/F1ourish/network-tools/actions/runs/37612881211),

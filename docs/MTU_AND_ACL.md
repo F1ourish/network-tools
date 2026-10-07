@@ -77,8 +77,8 @@ Object-group, time-range, fragments и прочие неизвестные ус�
 
 | Интерфейс | Запрос | Ответ |
 | --- | --- | --- |
-| Со стороны источника | ip access-group <name> in | ip access-group <name> out |
-| Со стороны назначения | ip access-group <name> out | ip access-group <name> in |
+| Со стороны источника | `ip access-group <name> in` | `ip access-group <name> out` |
+| Со стороны назначения | `ip access-group <name> out` | `ip access-group <name> in` |
 
 Номера слева - физические строки вставленного текста, sequence - номера правил.
 Вставка убирает пробелы по краям и Cisco counters, оставляя пустые строки.

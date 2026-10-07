@@ -44,24 +44,32 @@ ACL запросов/ответов и генератор паролей. Шес
 
 ## Интерфейс
 
-Снимки опубликованного EXE 1.3.0 из [проверки на Windows](https://github.com/F1ourish/network-tools/actions/runs/37612881211).
+Снимки опубликованного EXE 1.4.0 из [проверки на Windows](https://github.com/F1ourish/network-tools/actions/runs/37640205382).
 Источник снимков: [описание](docs/screenshots/README.md).
 
 Проверка ACL запроса и ответа:
 
-![ACL запроса и ответа, версия 1.3.0, ночная тема](docs/screenshots/acl-request-reply-1.3.0.png)
+![ACL запроса и ответа, версия 1.4.0, ночная тема](docs/screenshots/acl-request-reply-1.4.0.png)
+
+Большой редактор ACL:
+
+![Большой редактор ACL, версия 1.4.0](docs/screenshots/acl-expanded-1.4.0.png)
+
+Подсветка и объяснение ошибки на строке 19:
+
+![Ошибка object-group на строке 19, версия 1.4.0](docs/screenshots/acl-error-expanded-1.4.0.png)
 
 Расчёт MTU/MSS с профилем L2TP/IPsec:
 
-![MTU/MSS с профилем L2TP/IPsec, версия 1.3.0, ночная тема](docs/screenshots/mtu-profiles-1.3.0.png)
+![MTU/MSS с профилем L2TP/IPsec, версия 1.4.0, ночная тема](docs/screenshots/mtu-profiles-1.4.0.png)
 
 Генератор паролей:
 
-![Генератор паролей, версия 1.3.0, ночная тема](docs/screenshots/passwords-1.3.0.png)
+![Генератор паролей, версия 1.4.0, ночная тема](docs/screenshots/passwords-1.4.0.png)
 
 Контекстная справка по ACL:
 
-![Справка по ACL, версия 1.3.0](docs/screenshots/help-acl-1.3.0.png)
+![Справка по ACL, версия 1.4.0](docs/screenshots/help-acl-1.4.0.png)
 
 ## Использование
 
