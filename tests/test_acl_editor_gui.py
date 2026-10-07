@@ -10,6 +10,15 @@ def activate(app):
     app.root.update()
 
 
+def test_editor_controls_remain_visible_in_normal_window(app):
+    app.root.geometry("940x760")
+    activate(app)
+    canvas = app._canvases[4]
+    bottom = canvas.winfo_rooty() + canvas.winfo_height()
+    for control in (*app.acl_expand_buttons, *app.acl_absent_buttons):
+        assert control.winfo_rooty() + control.winfo_height() <= bottom
+
+
 def test_acl_scrollbars_follow_content_and_resize(app):
     activate(app)
     editor = app.acl_editors[0]

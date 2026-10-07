@@ -23,7 +23,7 @@ class AclEditor(ttk.Frame):
         self._draw_job = None
         self.columnconfigure(1, weight=1)
         self.rowconfigure(0, weight=1)
-        self.gutter = tk.Canvas(self, width=38, highlightthickness=0, takefocus=False)
+        self.gutter = tk.Canvas(self, width=38, height=1, highlightthickness=0, takefocus=False)
         self.gutter.grid(row=0, column=0, sticky="ns")
         self.text = tk.Text(
             self,
