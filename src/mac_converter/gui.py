@@ -909,7 +909,9 @@ class MacConverterApp:
 
     def open_acl_editor(self, index):
         if index in self._acl_editor_windows:
-            self._acl_editor_windows[index][0].lift()
+            window, editor = self._acl_editor_windows[index]
+            window.lift()
+            window.after_idle(editor.text.focus_set)
             return "break"
         window = tk.Toplevel(self.root)
         window.title(("ACL запроса", "ACL ответа")[index] + " - Network Tools")
@@ -955,12 +957,26 @@ class MacConverterApp:
         ttk.Button(controls, text="Вернуться", command=close).pack(side="right")
         window.protocol("WM_DELETE_WINDOW", close)
         window.bind("<Escape>", close)
+
+        def focus_editor(event):
+            key = (
+                event.keycode == 76
+                if self.root.tk.call("tk", "windowingsystem") == "win32"
+                else event.keysym.lower() == "l"
+            )
+            if key:
+                editor.text.focus_set()
+                editor.text.tag_add(tk.SEL, "1.0", "end-1c")
+                return "break"
+            return None
+
+        window.bind("<Control-KeyPress>", focus_editor)
         try:
             window.state("zoomed")
         except tk.TclError:
             pass
         self._apply_theme()
-        editor.text.focus_set()
+        window.after_idle(editor.text.focus_set)
         self._acl_flow_update()
         return "break"
 

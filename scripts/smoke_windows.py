@@ -786,6 +786,8 @@ def run_ui_checks(binary: Path) -> tuple[list[str], list[dict]]:
                             lambda: find_window(isolated.resolve(), "ACL запроса - Network Tools")
                         )
                         user32.SetForegroundWindow(expanded)
+                        wait_until(lambda: user32.GetForegroundWindow() == expanded)
+                        keys(0x11, ord("L"))
                         keys(0x11, ord("A"))
                         write_clipboard("  42 permit ip any any (2 matches)  ")
                         keys(0x11, ord("V"))
@@ -821,6 +823,7 @@ def run_ui_checks(binary: Path) -> tuple[list[str], list[dict]]:
                             lambda: find_window(isolated.resolve(), "ACL запроса - Network Tools")
                         )
                         user32.SetForegroundWindow(expanded)
+                        wait_until(lambda: user32.GetForegroundWindow() == expanded)
                         save_screenshot(
                             expanded, Path("smoke-results/acl-error-expanded-night.png")
                         )

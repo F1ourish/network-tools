@@ -74,6 +74,11 @@ def test_expanded_editor_syncs_live_and_closing_keeps_changes(app):
     app.root.update()
     window, editor = app._acl_editor_windows[0]
     assert editor.text.winfo_width() > app.acl_forward_input.winfo_width()
+    window.focus_force()
+    window.event_generate("<Control-KeyPress-l>")
+    app.root.update()
+    assert app.root.focus_get() is editor.text
+    assert editor.text.get(tk.SEL_FIRST, tk.SEL_LAST) == app.acl_forward_input.get("1.0", "end-1c")
     editor.text.delete("1.0", "end")
     editor.text.insert("1.0", "permit ip any any")
     app.root.update()
