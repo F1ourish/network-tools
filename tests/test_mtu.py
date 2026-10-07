@@ -134,3 +134,11 @@ def test_small_ipv6_budget_is_reported_and_tcp_options_not_guessed():
 def test_invalid_or_unusable_budget_is_rejected(parameters):
     with pytest.raises(InvalidNetworkInput):
         calculate_mtu(MtuOptions(**parameters))
+
+
+def test_maximum_supported_frame_budget_with_qinq_and_pppoe():
+    result = calculate_mtu(MtuOptions(size=65569, basis="frame", vlan_tags=2, pppoe=True))
+    assert result.outer_mtu == result.inner_mtu == 65535
+    assert result.frame == 65569
+    with pytest.raises(InvalidNetworkInput):
+        calculate_mtu(MtuOptions(size=65570, basis="frame", vlan_tags=2, pppoe=True))

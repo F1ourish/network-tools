@@ -71,4 +71,6 @@ Object-group, time-range, fragments и прочие неизвестные ус�
 Пустая вторая ACL означает, что ответ не проверен. established проверяет ACK/RST,
 а не соединение. NAT, маршрутизация, stateful firewall и фрагменты не моделируются.
 
-Источник: [Cisco IOS access lists](https://www.cisco.com/c/en/us/support/docs/security/ios-firewall/23602-confaccesslists.html).
+Источники: [ACK/RST](https://www.cisco.com/c/en/us/support/docs/ip/access-lists/26448-ACLsamples.html),
+[sequence number](https://www.cisco.com/c/en/us/td/docs/ios-xml/ios/sec_data_acl/configuration/xe-3e/sec-data-acl-xe-3e-book/sec-acl-seq-num.html),
+[Cisco IOS access lists](https://www.cisco.com/c/en/us/support/docs/security/ios-firewall/23602-confaccesslists.html).

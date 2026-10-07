@@ -45,6 +45,7 @@ def test_invalid_acl_and_flow_clear_output_and_copy_then_recover(app):
     assert "Строка 2" in app.acl_flow_error.get()
     assert app.acl_output.get("1.0", "end-1c") == ""
     assert app.acl_copy_button.instate(["disabled"])
+    assert "исправьте" in app.acl_conclusion.get()
     clipboard(app, "preserve")
     app.copy_acl()
     assert app.root.clipboard_get() == "preserve"
@@ -61,6 +62,7 @@ def test_edit_clears_stale_acl_report_before_debounce(app):
     assert app.acl_output.get("1.0", "end-1c") == ""
     assert app.acl_copy_button.instate(["disabled"])
     assert app._acl_job is not None
+    assert app.acl_conclusion.get() == "Проверка правил..."
 
 
 def test_acl_udp_ignores_tcp_established_and_wildcard_tool_is_collapsible(app):

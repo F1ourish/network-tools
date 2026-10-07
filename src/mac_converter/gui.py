@@ -695,6 +695,7 @@ class MacConverterApp:
         self.acl_destination_port = tk.StringVar(self.root, value="443")
         self.acl_ack = tk.BooleanVar(self.root, value=False)
         self.acl_flow_error = tk.StringVar(self.root)
+        self.acl_conclusion = tk.StringVar(self.root)
         inputs = ttk.Frame(page)
         inputs.grid(row=0, column=0, sticky="ew")
         for column in range(3):
@@ -719,12 +720,21 @@ class MacConverterApp:
             ports, text="TCP-запрос: ACK или RST", variable=self.acl_ack
         )
         self.acl_ack_button.grid(row=0, column=2, sticky="w", padx=12)
+        summary = ttk.Frame(page)
+        summary.grid(row=2, column=0, sticky="ew", pady=(12, 8))
+        summary.columnconfigure(0, weight=1)
         ttk.Label(
-            page,
+            summary,
+            textvariable=self.acl_conclusion,
+            font=("TkDefaultFont", 11, "bold"),
+            wraplength=780,
+        ).grid(row=0, column=0, sticky="ew", pady=(0, 4))
+        ttk.Label(
+            summary,
             text="ACL Cisco IOS IPv4. Вторая ACL проверяет ответ: IP и порты меняются местами.",
             wraplength=780,
             bootstyle="secondary",
-        ).grid(row=2, column=0, sticky="ew", pady=(12, 8))
+        ).grid(row=1, column=0, sticky="ew")
         lists = ttk.Frame(page)
         lists.grid(row=3, column=0, sticky="ew")
         self.acl_inputs = []
@@ -855,6 +865,7 @@ class MacConverterApp:
         self._set_text(self.acl_output, "")
         self.acl_copy_button.state(["disabled"])
         self.acl_flow_error.set("Проверка правил...")
+        self.acl_conclusion.set("Проверка правил...")
         self._acl_job = self.root.after(180, self._acl_flow_update)
 
     def _acl_flow_update(self, *_args):
@@ -878,10 +889,14 @@ class MacConverterApp:
             )
         except InvalidNetworkInput as error:
             self.acl_flow_error.set(str(error))
+            self.acl_conclusion.set("Проверка недоступна: исправьте входные данные.")
             self._set_text(self.acl_output, "")
             self.acl_copy_button.state(["disabled"])
             return
         self.acl_flow_error.set("")
+        self.acl_conclusion.set(
+            next(line for line in result.splitlines() if line.startswith("Вывод: "))
+        )
         self._set_text(self.acl_output, result)
         self.acl_copy_button.state(["!disabled"])
 
@@ -1564,6 +1579,7 @@ class MacConverterApp:
         self._set_text(self.routes_output, "")
         self._set_text(self.acl_output, "")
         self._set_text(self.mtu_breakdown, "")
+        self.acl_conclusion.set("")
         self.mtu_calculation = None
         for button in (
             self.acl_copy_button,

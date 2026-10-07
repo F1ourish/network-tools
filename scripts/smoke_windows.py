@@ -287,8 +287,8 @@ def run_ui_checks(binary: Path) -> tuple[list[str], list[dict]]:
 
     def select_choice(tab_count, index):
         focus_control(tab_count)
-        keys(0x12, 0x28)  # Alt+Down opens a readonly combobox.
-        keys(0x24)  # Home.
+        keys(0x28)  # Down opens a readonly combobox.
+        keys(0x11, 0x24)  # Ctrl+Home selects the first item; Home scrolls horizontally.
         for _ in range(index):
             keys(0x28)
         keys(0x0D)

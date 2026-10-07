@@ -51,9 +51,9 @@ class MtuOptions:
         if self.inner_ip not in (4, 6) or self.outer_ip not in (4, 6):
             raise InvalidNetworkInput("Выберите IPv4 или IPv6.")
         if type(self.size) is not int or not 1 <= self.size <= (
-            65593 if self.basis == "frame" else 65535
+            65569 if self.basis == "frame" else 65535
         ):
-            raise InvalidNetworkInput("Исходный размер должен быть 1-65535 (кадр с FCS: до 65593).")
+            raise InvalidNetworkInput("Исходный размер должен быть 1-65535 (кадр с FCS: до 65569).")
         if type(self.extra) is not int or not 0 <= self.extra <= 65535:
             raise InvalidNetworkInput("Дополнительный overhead должен быть 0-65535.")
         if self.vlan_tags not in (0, 1, 2) or self.inner_tags not in (0, 1, 2):
@@ -154,14 +154,14 @@ class MtuCalculation:
 
     def rows(self):
         return {
+            "Эффективный IP MTU": str(self.inner_mtu),
+            "TCP MSS": str(self.mss),
             "Исходный IP MTU": str(self.outer_mtu),
             "Инкапсуляция, байт": str(self.packet - self.inner_mtu),
-            "Эффективный IP MTU": str(self.inner_mtu),
-            "Фиксированный IP-заголовок": "20" if self.options.inner_ip == 4 else "40",
-            "Фиксированный TCP-заголовок": "20",
-            "TCP MSS": str(self.mss),
             "Ethernet-кадр с FCS": str(self.frame),
             "Резерв внешнего IP MTU": str(self.outer_mtu - self.packet),
+            "Фиксированный IP-заголовок": "20" if self.options.inner_ip == 4 else "40",
+            "Фиксированный TCP-заголовок": "20",
         }
 
     def explanation(self):
