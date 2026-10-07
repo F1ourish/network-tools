@@ -408,6 +408,7 @@ def run_ui_checks(binary: Path) -> tuple[list[str], list[dict]]:
                     process = launch_unprivileged(isolated, str(application), environment)
                     hwnd = None
                     password_test_started = False
+                    expect_clipboard_clear_on_close = False
                     try:
 
                         def appeared():
@@ -736,6 +737,17 @@ def run_ui_checks(binary: Path) -> tuple[list[str], list[dict]]:
                         checks.append(
                             "Context help: F1, route/ACL/password examples, readonly copy and Escape"
                         )
+                        keys(0x11, ord("6"))
+                        paste("20")
+                        focus_control(7)
+                        keys(0x20)
+                        write_clipboard("close copy sentinel")
+                        keys(0x11, 0x10, ord("C"))
+                        wait_until(
+                            lambda: (value := read_clipboard()) and value != "close copy sentinel"
+                        )
+                        expect_clipboard_clear_on_close = True
+
                     except BaseException as error:
                         target = Path("smoke-results")
                         target.mkdir(exist_ok=True)
@@ -775,6 +787,13 @@ def run_ui_checks(binary: Path) -> tuple[list[str], list[dict]]:
                             process.kill()
                             process.wait(timeout=5)
                         try:
+                            if not failed and expect_clipboard_clear_on_close:
+                                assert read_clipboard() is None, (
+                                    "Close did not clear its password from clipboard"
+                                )
+                                checks.append(
+                                    "Passwords: window close clears owned clipboard before process exit"
+                                )
                             if not failed:
                                 assert process.returncode == 0, (
                                     f"EXE exited with {process.returncode}"

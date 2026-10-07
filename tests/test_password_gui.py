@@ -171,3 +171,66 @@ def test_f1_and_escape_and_help_theme(app):
     app.help_window.event_generate("<Escape>")
     app.root.update()
     assert not app.help_window.winfo_exists()
+
+
+def test_closing_window_clears_owned_secret_before_destroy(app):
+    from mac_converter.gui import MacConverterApp
+
+    root = tk.Toplevel(app.root)
+    second = MacConverterApp(root, settings_path=app.settings.path)
+    second.generate_password()
+    second.copy_password()
+    root.update()
+    second.close()
+    app.root.update()
+    assert second._copied_password is None
+    assert second._clipboard_job is None
+    assert not root.winfo_exists()
+    with pytest.raises(tk.TclError):
+        app.root.clipboard_get()
+
+
+def test_toggling_auto_clear_changes_pending_timer(app):
+    generate(app)
+    app.copy_password()
+    first_job = app._clipboard_job
+    app.password_auto_clear.set(False)
+    assert app._clipboard_job is None
+    assert app._copied_password
+    app.password_auto_clear.set(True)
+    assert app._clipboard_job is not None and app._clipboard_job != first_job
+
+
+def test_password_clipboard_failure_keeps_hidden_result(app, monkeypatch):
+    value = generate(app)
+
+    def unavailable():
+        raise tk.TclError("clipboard busy")
+
+    monkeypatch.setattr(app.root, "clipboard_clear", unavailable)
+    app.copy_password()
+    assert app.status.get() == "Clipboard unavailable. Try Copy again."
+    assert app.password_result.get() == value
+    assert app.password_result_entry.cget("show") == "*"
+
+
+def test_busy_clipboard_retries_then_reports_failure_without_logging_secret(app, monkeypatch):
+    from mac_converter import gui
+    from mac_converter.clipboard import ClipboardUnavailable
+
+    generate(app)
+    app.copy_password()
+
+    def busy(*_args):
+        raise ClipboardUnavailable("busy")
+
+    monkeypatch.setattr(gui, "clear_if_matches", busy)
+    for _ in range(3):
+        app._clear_password_clipboard()
+        assert app._clipboard_job is not None
+        assert app._copied_password is not None
+    app._clear_password_clipboard()
+    assert app._clipboard_job is None
+    assert app._copied_password is None
+    assert "проверьте его вручную" in app.status.get()
+    assert app.password_result.get() not in app.status.get()

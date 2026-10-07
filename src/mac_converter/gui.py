@@ -9,6 +9,7 @@ from types import TracebackType
 import ttkbootstrap as ttk
 
 from . import __version__
+from .clipboard import ClipboardUnavailable, clear_if_matches
 from .help_content import TOOL_HELP
 from .mac import InvalidMacAddress, format_mac
 from .passwords import (
@@ -93,6 +94,7 @@ class MacConverterApp:
         self.help_window = None
         self._clipboard_job = None
         self._copied_password = None
+        self._clipboard_retries = 0
         self.status = tk.StringVar(root, value="Ready")
 
         shell = ttk.Frame(root, padding=(20, 16))
@@ -169,6 +171,7 @@ class MacConverterApp:
         self.notebook.bind("<<NotebookTabChanged>>", self._tool_changed)
         root.bind("<F1>", self.show_help)
         root.bind("<Destroy>", self._destroyed, add="+")
+        root.protocol("WM_DELETE_WINDOW", self.close)
         root.bind("<Control-l>", self.focus_input)
         root.bind("<Control-L>", self.focus_input)
         for index in range(len(TOOL_HELP)):
@@ -549,6 +552,7 @@ class MacConverterApp:
             *self.password_groups.values(),
         ):
             variable.trace_add("write", self._password_options_changed)
+        self.password_auto_clear.trace_add("write", self._password_auto_clear_changed)
         self._password_options_changed()
 
     def _password_options(self):
@@ -623,25 +627,40 @@ class MacConverterApp:
             return
         self._cancel_clipboard_job()
         self._copied_password = value
+        self._clipboard_retries = 0
         if self.password_auto_clear.get():
             self._clipboard_job = self.root.after(30000, self._clear_password_clipboard)
             self.status.set("Copied · автоочистка буфера через 30 с")
         else:
             self.status.set("Copied")
 
+    def _password_auto_clear_changed(self, *_args):
+        self._cancel_clipboard_job()
+        if self.password_auto_clear.get() and self._copied_password:
+            self._clipboard_job = self.root.after(30000, self._clear_password_clipboard)
+
     def _cancel_clipboard_job(self):
         if self._clipboard_job is not None:
             self.root.after_cancel(self._clipboard_job)
             self._clipboard_job = None
 
-    def _clear_password_clipboard(self):
+    def _clear_password_clipboard(self, *, retry=True):
         self._cancel_clipboard_job()
+        if self._copied_password is None:
+            return
         try:
-            if self._copied_password and self.root.clipboard_get() == self._copied_password:
-                self.root.clipboard_clear()
-        except tk.TclError:
-            pass
+            cleared = clear_if_matches(self.root, self._copied_password)
+        except ClipboardUnavailable:
+            if retry and self._clipboard_retries < 3:
+                self._clipboard_retries += 1
+                self._clipboard_job = self.root.after(1000, self._clear_password_clipboard)
+                return
+            self.status.set("Очистить буфер не удалось; проверьте его вручную.")
+        else:
+            if cleared:
+                self.status.set("Пароль удалён из буфера")
         self._copied_password = None
+        self._clipboard_retries = 0
 
     def clear_password(self):
         self.password_result.set("")
@@ -651,9 +670,14 @@ class MacConverterApp:
         self._clear_password_clipboard()
         self.status.set("Пароль очищен")
 
+    def close(self):
+        self._clear_password_clipboard(retry=False)
+        self.password_result.set("")
+        self.root.destroy()
+
     def _destroyed(self, event):
         if event.widget == self.root:
-            self._clear_password_clipboard()
+            self._clear_password_clipboard(retry=False)
             self.password_result.set("")
 
     def _tool_changed(self, _event=None):
