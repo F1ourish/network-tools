@@ -1,6 +1,32 @@
 # Проверка Network Tools 1.2.0
 
-Дата: 07.10.2026. Проверка исходников и сборка Windows выполняются до публикации.
+Дата: 07.10.2026. Кандидат проверен на Windows, включая фактический onefile EXE.
+Публикация повторяет все проверки для точного commit релиза.
+
+## Подтверждённый кандидат
+
+- Commit: `3fd7407eb45a452836a3c6c82be3cd7aa0d81f84`.
+- [Успешная проверка, attempt 2](https://github.com/F1ourish/mac-address-converter/actions/runs/37589966998).
+- Pytest: **313 passed**, failures/errors/skipped 0; 256 non-GUI и 57 GUI.
+- Actual EXE: **37 checks**, passed true. Windows Server 2025 build 26100,
+  desktop 1024×768, DPI 96, стандартный пользователь (elevated false,
+  administrators_enabled false, medium integrity), собственный Python/Tcl/Tk runtime.
+- Пройдены реальная 30-секундная очистка системного clipboard, сохранение замещающего
+  текста, очистка при закрытии и пустой генератор после повторного открытия.
+- Все прежние инструменты, обе темы и UI-справка маршрутов/ACL/паролей прошли smoke.
+
+В первом кандидате actual-EXE smoke выявил отличие очистки Tk от ОС-clipboard.
+Реализация исправлена: Windows API сравнивает и очищает данные под одной блокировкой.
+В attempt 1 указанного кандидата один старый GUI-тест остановился на чтении
+`focus.tcl` (TclError); attempt 2 на новом runner прошёл без изменения исходников.
+Причина единичного сбоя чтения не установлена; обязательная проверка не исключалась.
+
+Снимки готового EXE: [пароли](screenshots/passwords-1.2.0.png),
+[ACL help](screenshots/help-acl-1.2.0.png), [route help](screenshots/help-routes-1.2.0.png).
+На снимках help выделен текст для проверки копирования. Пароли скрыты.
+
+## Покрытие
+
 
 Локальные non-GUI тесты проверяют прежние расчёты/CLI, все комбинации групп пароля,
 длины 8/20/128, недопустимые параметры, исключения, дедупликацию, rejection sampling,
