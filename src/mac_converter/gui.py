@@ -915,7 +915,6 @@ class MacConverterApp:
             return "break"
         window = tk.Toplevel(self.root)
         window.title(("ACL запроса", "ACL ответа")[index] + " - Network Tools")
-        window.transient(self.root)
         window.geometry(
             f"{max(700, self.root.winfo_screenwidth() - 60)}x{max(500, self.root.winfo_screenheight() - 100)}+20+20"
         )
@@ -951,6 +950,7 @@ class MacConverterApp:
             del self._acl_editor_windows[index]
             window.destroy()
             self._acl_flow_update()
+            self.root.lift()
             self.acl_inputs[index].focus_set()
             return "break"
 

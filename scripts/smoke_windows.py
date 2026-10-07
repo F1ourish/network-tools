@@ -787,6 +787,21 @@ def run_ui_checks(binary: Path) -> tuple[list[str], list[dict]]:
                         )
                         user32.SetForegroundWindow(expanded)
                         wait_until(lambda: user32.GetForegroundWindow() == expanded)
+                        work_area = wt.RECT()
+                        user32.SystemParametersInfoW.argtypes = [
+                            wt.UINT,
+                            wt.UINT,
+                            wt.LPVOID,
+                            wt.UINT,
+                        ]
+                        user32.SystemParametersInfoW.restype = wt.BOOL
+                        assert user32.SystemParametersInfoW(0x30, 0, ct.byref(work_area), 0)
+                        expanded_bounds = wt.RECT()
+                        assert user32.GetWindowRect(expanded, ct.byref(expanded_bounds))
+                        frame_margin = user32.GetSystemMetrics(33) + user32.GetSystemMetrics(92)
+                        assert expanded_bounds.bottom <= work_area.bottom + frame_margin, (
+                            "Expanded editor covers the Windows taskbar area"
+                        )
                         keys(0x11, ord("L"))
                         keys(0x11, ord("A"))
                         write_clipboard("  42 permit ip any any (2 matches)  ")
