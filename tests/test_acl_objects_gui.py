@@ -114,10 +114,13 @@ def test_object_controls_fit_and_ctrl_l_selects_objects(app):
     setup_group_flow(app)
     app._set_acl_objects(GROUPS)
     app.open_acl_objects()
+    app.root.update()
     window, editor = app.acl_objects_window, app.acl_objects_editor
     window.state("normal")
     window.geometry("940x760")
+    app.root.update()
     window.focus_force()
+    app.root.update()
     window.event_generate("<Control-KeyPress-l>")
     app.root.update()
     assert app.root.focus_get() is editor.text
