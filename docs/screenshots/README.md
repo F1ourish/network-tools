@@ -1,5 +1,26 @@
 # Снимки Network Tools
 
+## Версия 1.5.0
+
+Снимки настоящего опубликованного `NetworkTools.exe` из [GitHub Actions run 37745215699](https://github.com/F1ourish/network-tools/actions/runs/37745215699).
+Источник - artifact `NetworkTools-verification-main`, папка `smoke-results`.
+Платформа - Windows-2025Server-10.0.26100-SP0; DPI 96, ночная тема.
+
+Source commit: `8f1a0c3e36558a85b29db4d132c8699ec62d8b7d`.
+SHA-256 EXE: `ed519a23b46ff8cbe09a85809d140997f81efaea2906d9b1cdb373f7ea053a6f`.
+
+| Файл в репозитории | Файл в артефакте |
+| --- | --- |
+| [acl-objects-1.5.0.png](acl-objects-1.5.0.png) | `smoke-results/acl-objects-night.png` |
+| [acl-objects-resolved-1.5.0.png](acl-objects-resolved-1.5.0.png) | `smoke-results/acl-objects-resolved-night.png` |
+| [acl-expanded-1.5.0.png](acl-expanded-1.5.0.png) | `smoke-results/acl-expanded-night.png` |
+| [mtu-profiles-1.5.0.png](mtu-profiles-1.5.0.png) | `smoke-results/mtu-profiles-night.png` |
+| [passwords-1.5.0.png](passwords-1.5.0.png) | `smoke-results/passwords-night.png` |
+| [help-acl-1.5.0.png](help-acl-1.5.0.png) | `smoke-results/help-tool-5.png` |
+
+Группы CONFERENCE_NET/OFFICE_NET/SERVERS содержат только тестовые адреса.
+В справке текст выделен при проверке копирования Ctrl+A/C.
+
 ## Версия 1.4.0
 
 Снимки настоящего опубликованного `NetworkTools.exe` из
