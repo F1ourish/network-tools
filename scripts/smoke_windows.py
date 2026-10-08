@@ -1040,6 +1040,54 @@ def run_ui_checks(binary: Path) -> tuple[list[str], list[dict]]:
                         paste("20")
                         checks.append("Passwords: invalid length disables copying and recovers")
 
+                        from mac_converter.passwords import DEFAULT_SYMBOLS
+
+                        paste_control(1, "!@")
+                        focus_control(8)  # The enabled Reset button adds one Tab stop.
+                        keys(0x20)
+                        write_clipboard("custom symbols sentinel")
+                        keys(0x11, 0x10, ord("C"))
+                        custom = wait_until(
+                            lambda: value
+                            if (value := read_clipboard()) and value != "custom symbols sentinel"
+                            else None
+                        )
+                        custom_groups = PasswordOptions(symbol_chars="!@").groups()
+                        assert len(custom) == 20
+                        assert all(set(custom) & set(group) for group in custom_groups)
+                        assert set(custom) <= set("".join(custom_groups))
+                        save_screenshot(hwnd, Path("smoke-results/passwords-custom-night.png"))
+                        focus_control(2)  # Length, symbols, Reset.
+                        keys(0x20)
+                        focus_control(1)
+                        keys(0x11, ord("A"))
+                        keys(0x11, ord("C"))
+                        wait_until(lambda: read_clipboard() == DEFAULT_SYMBOLS)
+                        assert_invalid_copy()
+                        checks.append(
+                            "Passwords: keyboard Reset restores the exact default symbols and clears stale output"
+                        )
+                        paste_control(1, "letters")
+                        assert_invalid_copy()
+                        focus_control(2)
+                        keys(0x20)
+                        focus_control(7)  # Reset is disabled again and skipped by Tab.
+                        keys(0x20)
+                        write_clipboard("reset recovery sentinel")
+                        keys(0x11, 0x10, ord("C"))
+                        restored = wait_until(
+                            lambda: value
+                            if (value := read_clipboard()) and value != "reset recovery sentinel"
+                            else None
+                        )
+                        assert len(restored) == 20
+                        assert all(set(restored) & set(group) for group in groups)
+                        assert set(restored) <= set("".join(groups))
+                        save_screenshot(hwnd, Path("smoke-results/passwords-night.png"))
+                        checks.append(
+                            "Passwords: Reset recovers invalid symbols and generates with the default policy"
+                        )
+
                         for tool, help_name in (
                             (4, "Маршруты"),
                             (5, "ACL"),

@@ -1,10 +1,10 @@
 # Сборка и выпуск Network Tools
 
-Версия документа: 2.3; дата: 08.10.2026; контур: Windows / GitHub Actions.
+Версия документа: 2.4; дата: 08.10.2026; контур: Windows / GitHub Actions.
 
 Выпуск проходит через тесты исходников, запуск готового EXE и проверку hashes.
 Публикуется точный source commit, для которого Windows job сформировал assets.
-Целевая версия - 1.5.0; статус конкретной проверки - VALIDATION_1_5_0.md.
+Целевая версия - 1.5.1; статус конкретной проверки - VALIDATION_1_5_1.md.
 
 ## Подготовка и сборка
 
@@ -38,7 +38,7 @@ Win32 smoke запускает EXE в новой папке с пробелам�
 | Файл | Назначение |
 | --- | --- |
 | dist/NetworkTools.exe | Standalone GUI x64 |
-| dist/NetworkTools-1.5.0-windows-x64.zip | EXE, инструкция, notices и verification report |
+| dist/NetworkTools-1.5.1-windows-x64.zip | EXE, инструкция, notices и verification report |
 | dist/RELEASE_VERIFICATION.json | Version, source commit, runner, dependencies, pytest summary, actual smoke checks |
 | dist/SHA256SUMS.txt | SHA-256 EXE, ZIP и verification JSON |
 | smoke-results/pytest.xml | Фактические результаты pytest |
@@ -51,7 +51,7 @@ ZIP и sums создаются только после successful smoke. Failed 
 
 ```powershell
 Get-FileHash .\dist\NetworkTools.exe -Algorithm SHA256
-Get-FileHash .\dist\NetworkTools-1.5.0-windows-x64.zip -Algorithm SHA256
+Get-FileHash .\dist\NetworkTools-1.5.1-windows-x64.zip -Algorithm SHA256
 Get-Content .\dist\SHA256SUMS.txt
 ```
 

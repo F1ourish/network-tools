@@ -1259,6 +1259,13 @@ class MacConverterApp:
         self.password_symbols_entry = self._field(
             inputs, "Допустимые спецсимволы", self.password_symbols, 1
         )
+        self.password_symbols_reset_button = ttk.Button(
+            self.password_symbols_entry.master,
+            text="Сбросить",
+            command=self.reset_password_symbols,
+            bootstyle="secondary",
+        )
+        self.password_symbols_reset_button.grid(row=1, column=2, padx=(6, 0))
         choices = ttk.Frame(page)
         choices.grid(row=1, column=0, sticky="w", pady=(16, 10))
         self.password_group_buttons = {}
@@ -1353,6 +1360,9 @@ class MacConverterApp:
         self.password_symbols_entry.configure(
             state="normal" if self.password_groups["symbols"].get() else "disabled"
         )
+        self.password_symbols_reset_button.state(
+            ["disabled"] if self.password_symbols.get() == DEFAULT_SYMBOLS else ["!disabled"]
+        )
         try:
             options = self._password_options()
             bits = entropy_bits(options)
@@ -1372,10 +1382,14 @@ class MacConverterApp:
             hint += " Небольшое пространство вариантов: увеличьте длину или набор символов."
         self.password_info.set(f"Энтропия равномерной генерации: ≈{bits:.1f} бит.{hint}")
 
+    def reset_password_symbols(self):
+        if self.password_symbols.get() != DEFAULT_SYMBOLS:
+            self.password_symbols.set(DEFAULT_SYMBOLS)
+            self.status.set("Стандартные спецсимволы восстановлены")
+
     def generate_password(self):
         self.password_result.set("")
         self.password_copy_button.state(["disabled"])
-        self.password_show.set(False)
         self._password_visibility()
         try:
             value = generate_password(self._password_options())

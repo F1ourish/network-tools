@@ -6,6 +6,7 @@ import tkinter as tk
 import pytest
 
 from mac_converter.help_content import TOOL_HELP
+from mac_converter.passwords import DEFAULT_SYMBOLS
 
 pytestmark = pytest.mark.gui
 
@@ -61,6 +62,87 @@ def test_bad_options_clear_secret_and_disable_actions_then_recover(app):
         value.set(False)
     assert app.password_result.get() == ""
     assert app.password_generate_button.instate(["disabled"])
+
+
+@pytest.mark.parametrize("visible", [False, True])
+def test_regeneration_preserves_password_visibility(app, visible):
+    generate(app)
+    if visible:
+        app.password_show_button.invoke()
+    for _ in range(2):
+        app.password_generate_button.invoke()
+        assert len(app.password_result.get()) == 20
+        assert app.password_show.get() is visible
+        assert app.password_result_entry.cget("show") == ("" if visible else "*")
+        assert app.password_copy_button.instate(["!disabled"])
+
+
+@pytest.mark.parametrize("custom", ["!@", "", "letters"])
+def test_reset_symbols_restores_defaults_and_revalidates_without_changing_policy(app, custom):
+    app.password_length.set("24")
+    app.password_groups["lowercase"].set(False)
+    app.password_ambiguous.set(False)
+    policy = {name: value.get() for name, value in app.password_groups.items()}
+    assert app.password_symbols_reset_button.instate(["disabled"])
+    app.password_symbols.set(custom)
+    assert app.password_symbols_reset_button.instate(["!disabled"])
+    if custom == "!@":
+        assert len(generate(app)) == 24
+    else:
+        assert app.password_error.get()
+        assert app.password_generate_button.instate(["disabled"])
+    app.password_symbols_reset_button.invoke()
+    assert app.password_symbols.get() == DEFAULT_SYMBOLS
+    assert app.password_symbols_reset_button.instate(["disabled"])
+    assert app.password_length.get() == "24"
+    assert app.password_ambiguous.get() is False
+    assert {name: value.get() for name, value in app.password_groups.items()} == policy
+    assert app.password_result.get() == ""
+    assert app.password_copy_button.instate(["disabled"])
+    assert app.password_error.get() == ""
+    assert app.password_generate_button.instate(["!disabled"])
+    assert len(generate(app)) == 24
+
+
+def test_reset_symbols_keeps_unselected_symbol_group_off(app):
+    app.password_symbols.set("!@")
+    app.password_groups["symbols"].set(False)
+    assert str(app.password_symbols_entry.cget("state")) == "disabled"
+    assert app.password_symbols_reset_button.instate(["!disabled"])
+    app.password_symbols_reset_button.invoke()
+    assert app.password_symbols.get() == DEFAULT_SYMBOLS
+    assert app.password_groups["symbols"].get() is False
+    assert str(app.password_symbols_entry.cget("state")) == "disabled"
+    assert not set(generate(app)) & set(DEFAULT_SYMBOLS)
+
+
+def test_default_symbols_reset_does_not_clear_current_password(app):
+    value = generate(app)
+    app.password_show_button.invoke()
+    assert app.password_symbols_reset_button.instate(["disabled"])
+    app.password_symbols_reset_button.invoke()
+    app.reset_password_symbols()
+    assert app.password_result.get() == value
+    assert app.password_copy_button.instate(["!disabled"])
+    assert app.password_show.get() is True
+
+
+def test_failed_regeneration_keeps_visibility_and_clears_previous_password(app, monkeypatch):
+    from mac_converter import gui
+
+    generate(app)
+    app.password_show_button.invoke()
+
+    def unavailable(*_args):
+        raise OSError("sensitive details")
+
+    monkeypatch.setattr(gui, "generate_password", unavailable)
+    app.password_generate_button.invoke()
+    assert app.password_show.get() is True
+    assert app.password_result_entry.cget("show") == ""
+    assert app.password_result.get() == ""
+    assert app.password_copy_button.instate(["disabled"])
+    assert "sensitive" not in app.password_error.get()
 
 
 def test_custom_symbols_and_weak_space_hint(app):
