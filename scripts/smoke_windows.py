@@ -886,15 +886,16 @@ def run_ui_checks(binary: Path) -> tuple[list[str], list[dict]]:
                             "ACL EXE: full show output removes prompts/commands/counters and preserves ACL identity"
                         )
                         select_choice(2, 1)  # UDP
+                        # UDP disables ACK; Tk skips it during Tab traversal from here on.
                         paste_control(3, "8801")
                         paste_control(4, "9000")
                         paste_control(
-                            7,
+                            6,
                             "200 permit udp object-group CONFERENCE_NET eq 8801 object-group SERVERS\n"
                             "300 deny ip any any",
                         )
                         paste_control(
-                            11,
+                            10,
                             "10 permit udp object-group SERVERS eq 9000 object-group CONFERENCE_NET eq 8801\n"
                             "20 deny ip any any",
                         )
@@ -908,7 +909,7 @@ def run_ui_checks(binary: Path) -> tuple[list[str], list[dict]]:
                         )
 
                         def edit_ip_groups(value, screenshot=None):
-                            focus_control(17)  # Example, Clear ACL, IP groups.
+                            focus_control(16)  # Example, Clear ACL, IP groups; ACK disabled in UDP.
                             keys(0x20)
                             objects_window = wait_until(
                                 lambda: find_window(
