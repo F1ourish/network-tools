@@ -1,5 +1,22 @@
 # Снимки Network Tools
 
+## Версия 1.5.1
+
+Снимки настоящего опубликованного `NetworkTools.exe` из [GitHub Actions run 37754564894](https://github.com/F1ourish/network-tools/actions/runs/37754564894).
+Источник - artifact `NetworkTools-verification-main`, папка `smoke-results`.
+Платформа - Windows-2025Server-10.0.26100-SP0; DPI 96, ночная тема.
+
+Source commit: `dfddf33fb126a15a66b9fab60e8e7212438ac01a`.
+SHA-256 EXE: `300fdb970781ecea3545e1d7d28ef89cb0d52b4af4396f05adce87524a7a5e7c`.
+
+| Файл в репозитории | Файл в артефакте |
+| --- | --- |
+| [passwords-1.5.1.png](passwords-1.5.1.png) | `smoke-results/passwords-night.png` |
+| [passwords-custom-1.5.1.png](passwords-custom-1.5.1.png) | `smoke-results/passwords-custom-night.png` |
+
+Все пароли на снимках скрыты; custom показывает доступный сброс списка `!@`.
+Остальные инструменты в README показаны снимками версии 1.5.0.
+
 ## Версия 1.5.0
 
 Снимки настоящего опубликованного `NetworkTools.exe` из [GitHub Actions run 37745215699](https://github.com/F1ourish/network-tools/actions/runs/37745215699).

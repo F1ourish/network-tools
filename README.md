@@ -46,7 +46,8 @@ ACL запросов/ответов и генератор паролей. Шес
 
 ## Интерфейс
 
-Снимки опубликованного EXE 1.5.0 из [проверки на Windows](https://github.com/F1ourish/network-tools/actions/runs/37745215699).
+Генератор показан в опубликованном EXE 1.5.1 из [проверки на Windows](https://github.com/F1ourish/network-tools/actions/runs/37754564894).
+Остальные снимки относятся к версии 1.5.0: [проверка на Windows](https://github.com/F1ourish/network-tools/actions/runs/37745215699).
 Источник снимков: [описание](docs/screenshots/README.md).
 
 Редактор IP-групп:
@@ -67,7 +68,11 @@ MTU/MSS с профилем L2TP/IPsec:
 
 Генератор паролей:
 
-![Генератор паролей, версия 1.5.0](docs/screenshots/passwords-1.5.0.png)
+![Генератор паролей, версия 1.5.1](docs/screenshots/passwords-1.5.1.png)
+
+Изменённый набор спецсимволов с доступной кнопкой сброса:
+
+![Сброс спецсимволов, версия 1.5.1](docs/screenshots/passwords-custom-1.5.1.png)
 
 Контекстная справка по ACL:
 
