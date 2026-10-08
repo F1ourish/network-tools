@@ -11,6 +11,7 @@ import ttkbootstrap as ttk
 from . import __version__
 from .acl import AclSyntaxError, check_conversation, make_flow, normalize_acl_paste
 from .acl_editor import AclEditor, AutoScrollbar
+from .acl_objects import ObjectGroupSyntaxError, normalize_object_paste, parse_object_groups
 from .clipboard import ClipboardUnavailable, clear_if_matches
 from .help_content import TOOL_HELP
 from .mac import InvalidMacAddress, format_mac
@@ -99,6 +100,9 @@ class MacConverterApp:
         self._clipboard_retries = 0
         self._acl_job = None
         self._acl_editor_windows = {}
+        self.acl_objects_window = None
+        self.acl_objects_editor = None
+        self.acl_objects_value = ""
         self.mtu_calculation = None
         self.status = tk.StringVar(root, value="Ready")
 
@@ -259,7 +263,7 @@ class MacConverterApp:
             self.status.set("В буфере нет доступного текста. Попробуйте вставить ещё раз.")
             return "break"
         if getattr(widget, "acl_normalize", False):
-            value = normalize_acl_paste(value)
+            value = getattr(widget, "paste_normalizer", normalize_acl_paste)(value)
         if not isinstance(widget, tk.Text):
             value = value.strip()
             if "\n" in value or "\r" in value:
@@ -705,6 +709,9 @@ class MacConverterApp:
         self.route_address.trace_add("write", self._routes_update)
 
     def _build_acl(self, page):
+        self.acl_objects_summary = tk.StringVar(self.root, value="IP-группы: не заданы")
+        self.acl_objects_error = tk.StringVar(self.root)
+        self.acl_object_name = tk.StringVar(self.root)
         self.acl_source = tk.StringVar(self.root, value="192.0.2.10")
         self.acl_destination = tk.StringVar(self.root, value="198.51.100.20")
         self.acl_protocol = tk.StringVar(self.root, value="TCP")
@@ -815,10 +822,19 @@ class MacConverterApp:
         )
         self.acl_example_button.pack(side="left")
         ttk.Button(actions, text="Очистить ACL", command=self._acl_clear).pack(side="left", padx=8)
+        self.acl_objects_button = ttk.Button(
+            actions, text="IP-группы", command=self.open_acl_objects
+        )
+        self.acl_objects_button.pack(side="left")
+        self.acl_clean_button = ttk.Button(actions, text="Очистить вывод", command=self._acl_clean)
+        self.acl_clean_button.pack(side="left", padx=8)
         self.acl_copy_button = ttk.Button(
             actions, text="Копировать заключение", command=self.copy_acl
         )
         self.acl_copy_button.pack(side="right")
+        ttk.Label(actions, textvariable=self.acl_objects_summary, bootstyle="secondary").pack(
+            side="left"
+        )
         ttk.Label(page, textvariable=self.acl_flow_error, wraplength=780, bootstyle="danger").grid(
             row=5, column=0, sticky="ew", pady=(4, 4)
         )
@@ -941,6 +957,9 @@ class MacConverterApp:
         ttk.Button(
             controls, text="Вставить ACL", command=lambda: self._paste(editor.text, replace=True)
         ).pack(side="left")
+        ttk.Button(controls, text="Очистить вывод", command=self._acl_clean).pack(
+            side="left", padx=6
+        )
         ttk.Checkbutton(controls, text="ACL не назначена", variable=self.acl_absent[index]).pack(
             side="left", padx=12
         )
@@ -979,6 +998,157 @@ class MacConverterApp:
         window.after_idle(editor.text.focus_set)
         self._acl_flow_update()
         return "break"
+
+    def _acl_clean(self):
+        for index, widget in enumerate(self.acl_inputs):
+            self._set_acl_text(index, normalize_acl_paste(widget.get("1.0", "end-1c")))
+        self._acl_flow_update()
+
+    def _acl_objects_validate(self):
+        if self.acl_objects_editor is not None:
+            self.acl_objects_editor.show_error()
+        try:
+            groups = parse_object_groups(self.acl_objects_value)
+        except InvalidNetworkInput as error:
+            self.acl_objects_error.set(str(error))
+            self.acl_objects_summary.set("IP-группы: исправьте состав")
+            if isinstance(error, ObjectGroupSyntaxError) and self.acl_objects_editor is not None:
+                self.acl_objects_editor.show_error(error.line)
+        else:
+            self.acl_objects_error.set("")
+            self.acl_objects_summary.set(
+                f"IP-группы: {len(groups)}" if groups else "IP-группы: не заданы"
+            )
+
+    def _acl_objects_changed(self, event):
+        self.acl_objects_value = event.widget.get("1.0", "end-1c")
+        self._acl_modified(event)
+
+    def open_acl_objects(self):
+        if self.acl_objects_window is not None:
+            self.acl_objects_window.lift()
+            self.acl_objects_window.after_idle(self.acl_objects_editor.text.focus_set)
+            return "break"
+        window = tk.Toplevel(self.root)
+        self.acl_objects_window = window
+        window.title("IP-группы ACL - Network Tools")
+        window.geometry(
+            f"{max(700, self.root.winfo_screenwidth() - 60)}x{max(500, self.root.winfo_screenheight() - 100)}+20+20"
+        )
+        window.minsize(650, 450)
+        window.columnconfigure(0, weight=1)
+        window.rowconfigure(2, weight=1)
+        instructions = ttk.Label(
+            window,
+            text="Состав групп общий для ACL запроса и ответа. Вставьте вывод show object-group или блоки object-group network <имя>.\n"
+            "Объекты: host 192.0.2.10, 192.0.2.0/24, 192.0.2.0 255.255.255.0, any, group-object <имя>. Маска здесь - маска подсети, не wildcard.",
+            wraplength=max(600, self.root.winfo_screenwidth() - 100),
+            padding=12,
+        )
+        instructions.grid(row=0, column=0, sticky="ew")
+        window.bind(
+            "<Configure>",
+            lambda event: instructions.configure(wraplength=max(300, event.width - 24))
+            if event.widget is window
+            else None,
+        )
+        naming = ttk.Frame(window, padding=(12, 0, 12, 8))
+        naming.grid(row=1, column=0, sticky="ew")
+        ttk.Label(naming, text="Имя группы:").pack(side="left")
+        name_entry = ttk.Entry(naming, textvariable=self.acl_object_name, width=28)
+        name_entry.pack(side="left", padx=8)
+        self._bind_selection(name_entry)
+        references = re.findall(
+            r"\bobject-group\s+(\S+)",
+            "\n".join(widget.get("1.0", "end-1c") for widget in self.acl_inputs),
+            re.I,
+        )
+        if not self.acl_object_name.get() and references:
+            self.acl_object_name.set(references[0])
+        ttk.Button(naming, text="Добавить группу", command=self._acl_add_object_group).pack(
+            side="left"
+        )
+        ttk.Label(naming, textvariable=self.acl_objects_summary, bootstyle="secondary").pack(
+            side="right"
+        )
+        editor = AclEditor(self, window, height=24, changed=self._acl_objects_changed)
+        self.acl_objects_editor = editor
+        editor.text.paste_normalizer = normalize_object_paste
+        editor.grid(row=2, column=0, sticky="nsew", padx=12)
+        editor.set_text(self.acl_objects_value)
+        ttk.Label(
+            window,
+            textvariable=self.acl_objects_error,
+            bootstyle="danger",
+            wraplength=max(600, self.root.winfo_screenwidth() - 100),
+        ).grid(row=3, column=0, sticky="ew", padx=12, pady=(6, 0))
+        controls = ttk.Frame(window, padding=12)
+        controls.grid(row=4, column=0, sticky="ew")
+        ttk.Button(
+            controls,
+            text="Вставить группы",
+            command=lambda: self._paste(editor.text, replace=True),
+        ).pack(side="left")
+        ttk.Button(
+            controls,
+            text="Очистить вывод",
+            command=lambda: self._set_acl_objects(normalize_object_paste(self.acl_objects_value)),
+        ).pack(side="left", padx=8)
+        ttk.Button(
+            controls, text="Очистить группы", command=lambda: self._set_acl_objects("")
+        ).pack(side="left")
+
+        def close(_event=None):
+            self.acl_objects_value = editor.text.get("1.0", "end-1c")
+            self.acl_objects_window = self.acl_objects_editor = None
+            window.destroy()
+            self._acl_flow_update()
+            self.root.lift()
+            self.acl_objects_button.focus_set()
+            return "break"
+
+        ttk.Button(controls, text="Вернуться", command=close).pack(side="right")
+        window.protocol("WM_DELETE_WINDOW", close)
+        window.bind("<Escape>", close)
+
+        def focus_editor(event):
+            key = (
+                event.keycode == 76
+                if self.root.tk.call("tk", "windowingsystem") == "win32"
+                else event.keysym.lower() == "l"
+            )
+            if key:
+                editor.text.focus_set()
+                editor.text.tag_add(tk.SEL, "1.0", "end-1c")
+                return "break"
+            return None
+
+        window.bind("<Control-KeyPress>", focus_editor)
+        try:
+            window.state("zoomed")
+        except tk.TclError:
+            pass
+        self._apply_theme()
+        window.after_idle(editor.text.focus_set)
+        self._acl_flow_update()
+        return "break"
+
+    def _set_acl_objects(self, value):
+        self.acl_objects_value = value
+        if self.acl_objects_editor is not None:
+            self.acl_objects_editor.set_text(value)
+        self._acl_flow_update()
+
+    def _acl_add_object_group(self):
+        name = self.acl_object_name.get().strip()
+        if not name or re.search(r"\s", name):
+            self.acl_objects_error.set("Укажите имя группы без пробелов.")
+            return
+        value = self.acl_objects_editor.text.get("1.0", "end-1c").rstrip()
+        self._set_acl_objects((value + "\n" if value else "") + f"object-group network {name}\n")
+        self.acl_objects_editor.text.mark_set(tk.INSERT, "end-1c")
+        self.acl_objects_editor.text.see(tk.INSERT)
+        self.acl_objects_editor.text.focus_set()
 
     def _toggle_wildcard(self):
         if self.acl_wildcard_visible.get():
@@ -1025,6 +1195,7 @@ class MacConverterApp:
             self.root.after_cancel(self._acl_job)
             self._acl_job = None
         self.acl_ack_button.state(["!disabled" if self.acl_protocol.get() == "TCP" else "disabled"])
+        self._acl_objects_validate()
         for editor in self.acl_editors:
             editor.show_error()
         for _window, editor in self._acl_editor_windows.values():
@@ -1044,6 +1215,7 @@ class MacConverterApp:
                 flow,
                 forward_absent=self.acl_absent[0].get(),
                 reverse_absent=self.acl_absent[1].get(),
+                object_group_value=self.acl_objects_value,
             )
         except InvalidNetworkInput as error:
             if isinstance(error, AclSyntaxError) and error.side is not None:

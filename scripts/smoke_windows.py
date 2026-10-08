@@ -868,6 +868,110 @@ def run_ui_checks(binary: Path) -> tuple[list[str], list[dict]]:
                         checks.append(
                             "ACL EXE: absent-direction flags retain lists, skip only that ACL and restore its decision"
                         )
+                        paste_control(11, "")
+                        paste_control(
+                            7,
+                            "edge#sh ip access-lists ADMIN\nExtended IP access list ADMIN\n"
+                            " 10 permit ip any any (27 matches)\n 20 deny ip any any (1 match)\nedge#",
+                        )
+                        copy_tool("РАЗРЕШЁН: sequence 10, строка 2")
+                        focus_control(7)
+                        keys(0x11, ord("A"))
+                        keys(0x11, ord("C"))
+                        wait_until(
+                            lambda: (read_clipboard() or "").replace("\r\n", "\n")
+                            == "ip access-list extended ADMIN\n10 permit ip any any\n20 deny ip any any"
+                        )
+                        checks.append(
+                            "ACL EXE: full show output removes prompts/commands/counters and preserves ACL identity"
+                        )
+                        select_choice(2, 1)  # UDP
+                        paste_control(3, "8801")
+                        paste_control(4, "9000")
+                        paste_control(
+                            7,
+                            "200 permit udp object-group CONFERENCE_NET eq 8801 object-group SERVERS\n"
+                            "300 deny ip any any",
+                        )
+                        paste_control(
+                            11,
+                            "10 permit udp object-group SERVERS eq 9000 object-group CONFERENCE_NET eq 8801\n"
+                            "20 deny ip any any",
+                        )
+                        time.sleep(0.3)
+                        assert_invalid_copy()
+                        object_values = (
+                            "edge#show object-group\nNetwork object group CONFERENCE_NET\n"
+                            " group-object OFFICE_NET\nNetwork object group OFFICE_NET\n"
+                            " host 192.0.2.10\nNetwork object group SERVERS\n"
+                            " 198.51.100.0 255.255.255.0\nedge#"
+                        )
+
+                        def edit_ip_groups(value, screenshot=None):
+                            focus_control(17)  # Example, Clear ACL, IP groups.
+                            keys(0x20)
+                            objects_window = wait_until(
+                                lambda: find_window(
+                                    isolated.resolve(), "IP-группы ACL - Network Tools"
+                                )
+                            )
+                            user32.SetForegroundWindow(objects_window)
+                            wait_until(lambda: user32.GetForegroundWindow() == objects_window)
+                            bounds = wt.RECT()
+                            assert user32.GetWindowRect(objects_window, ct.byref(bounds))
+                            assert bounds.bottom <= work_area.bottom + frame_margin
+                            keys(0x11, ord("L"))
+                            write_clipboard(value)
+                            keys(0x11, ord("V"))
+                            time.sleep(0.3)
+                            keys(0x11, ord("A"))
+                            keys(0x11, ord("C"))
+                            from mac_converter.acl_objects import normalize_object_paste
+
+                            wait_until(
+                                lambda: (read_clipboard() or "").replace("\r\n", "\n")
+                                == normalize_object_paste(value)
+                            )
+                            keys(0x27)
+                            if screenshot:
+                                save_screenshot(objects_window, Path(screenshot))
+                            keys(0x1B)
+                            wait_until(
+                                lambda: not find_window(
+                                    isolated.resolve(), "IP-группы ACL - Network Tools"
+                                )
+                            )
+                            user32.SetForegroundWindow(hwnd)
+                            wait_until(lambda: user32.GetForegroundWindow() == hwnd)
+
+                        edit_ip_groups(object_values, "smoke-results/acl-objects-night.png")
+                        copy_tool(
+                            "запрос и ответ разрешены",
+                            "sequence 200, строка 1",
+                            "IP-группа CONFERENCE_NET источника",
+                            "IP-группа CONFERENCE_NET назначения",
+                            "198.51.100.20 входит в 198.51.100.0/24",
+                        )
+                        save_screenshot(hwnd, Path("smoke-results/acl-objects-resolved-night.png"))
+                        checks.append(
+                            "ACL EXE: IP group window accepts show output/nesting; groups match both directions and keep sequence"
+                        )
+                        edit_ip_groups(
+                            object_values.replace("host 192.0.2.10", "host 203.0.113.10")
+                        )
+                        copy_tool("ACL блокируют", "БЛОКИРУЕТСЯ: sequence 300")
+                        checks.append(
+                            "ACL EXE: changing group membership rechecks request/reply and retains the editor across reopen"
+                        )
+                        edit_ip_groups(
+                            "object-group network CONFERENCE_NET\ngroup-object CONFERENCE_NET"
+                        )
+                        assert_invalid_copy()
+                        edit_ip_groups(object_values)
+                        copy_tool("запрос и ответ разрешены")
+                        checks.append(
+                            "ACL EXE: cyclic group clears stale conclusion; restoring definitions recovers without restart"
+                        )
                         # These are disposable test secrets; never print or capture them unmasked.
                         keys(0x11, ord("6"))
                         password_test_started = True

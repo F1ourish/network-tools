@@ -5,6 +5,7 @@ from ipaddress import IPv4Address
 import re
 
 from .network import InvalidNetworkInput, ipv4_address
+from .acl_objects import NetworkGroup, cli_payload, parse_object_groups
 
 PROTOCOLS = {
     "icmp": 1,
@@ -48,9 +49,17 @@ COUNTER = re.compile(r"\s+\(\s*[0-9]+\s+match(?:es)?\s*\)\s*$", re.I)
 
 
 def normalize_acl_paste(value: str) -> str:
-    """Clean display-only counters and indentation while preserving physical lines."""
+    """Clean terminal output; preserve policy, ACL type/name and intentional blank lines."""
     lines = value.replace("\r\n", "\n").replace("\r", "\n").split("\n")
-    return "\n".join(COUNTER.sub("", line.strip()) for line in lines)
+    cleaned = []
+    for raw in lines:
+        text = cli_payload(raw)
+        if text is None:
+            continue
+        if header := re.fullmatch(r"(Standard|Extended) IP access list (\S+)", text, re.I):
+            text = f"ip access-list {header[1].lower()} {header[2]}"
+        cleaned.append(COUNTER.sub("", text))
+    return "\n".join(cleaned)
 
 
 class AclSyntaxError(InvalidNetworkInput):
@@ -175,8 +184,8 @@ def make_flow(
 class Rule:
     action: str
     protocol: int | None
-    source: AddressCondition
-    destination: AddressCondition
+    source: AddressCondition | NetworkGroup
+    destination: AddressCondition | NetworkGroup
     source_port: PortCondition | None
     destination_port: PortCondition | None
     established: bool
@@ -204,7 +213,14 @@ class Rule:
                 return False, ""
         if missing:
             return None, "Неизвестен порт " + " и ".join(missing) + "."
-        return True, "Первое совпадение по порядку правил."
+        details = ["Первое совпадение по порядку правил."]
+        for condition, address, label in (
+            (self.source, flow.source, "источника"),
+            (self.destination, flow.destination, "назначения"),
+        ):
+            if isinstance(condition, NetworkGroup):
+                details.append(condition.match_text(address, label))
+        return True, " ".join(details)
 
 
 @dataclass(frozen=True)
@@ -214,8 +230,9 @@ class Acl:
 
 
 class _Tokens:
-    def __init__(self, words):
+    def __init__(self, words, object_groups):
         self.words = words
+        self.object_groups = object_groups
         self.position = 0
 
     def peek(self):
@@ -231,12 +248,17 @@ class _Tokens:
     def address(self, *, standard=False):
         word = self.take()
         if word == "object-group":
+            if standard:
+                raise InvalidNetworkInput("IP-группы поддерживаются в extended ACL.")
             name = self.words[self.position] if self.position < len(self.words) else "?"
-            raise InvalidNetworkInput(
-                f"object-group '{name}' требует раскрытия состава группы. "
-                f"Получить состав на Cisco: show object-group {name}. "
-                "В этой версии используйте отдельные правила с адресами группы."
-            )
+            self.take()
+            if name not in self.object_groups:
+                raise InvalidNetworkInput(
+                    f"Не задан состав object-group '{name}'. "
+                    f"Получить состав на Cisco: show object-group {name}. "
+                    "Откройте «IP-группы» и вставьте определение группы с её адресами."
+                )
+            return self.object_groups[name]
         if word == "any":
             return AddressCondition()
         if word == "host":
@@ -270,7 +292,7 @@ def _kind_for_number(name):
     raise InvalidNetworkInput("Номер IPv4 ACL должен быть 1-99, 100-199, 1300-1999 или 2000-2699.")
 
 
-def parse_acl(value: str) -> Acl:
+def parse_acl(value: str, *, object_groups: dict[str, NetworkGroup] | None = None) -> Acl:
     if len(value.encode("utf-8")) > 1_000_000 or len(value.splitlines()) > 10000:
         raise InvalidNetworkInput("Допускается до 10000 строк и 1 МБ текста ACL.")
     rules, sequences = [], set()
@@ -321,7 +343,7 @@ def parse_acl(value: str) -> Acl:
                 raise InvalidNetworkInput("Неполное правило.")
             if words[0].lower() == "remark":
                 continue
-            tokens = _Tokens(words)
+            tokens = _Tokens(words, object_groups or {})
             action = tokens.take()
             if action not in ("permit", "deny"):
                 raise InvalidNetworkInput(
@@ -329,7 +351,9 @@ def parse_acl(value: str) -> Acl:
                 )
             inferred = (
                 "extended"
-                if tokens.peek() == "ip" or tokens.peek() in PROTOCOLS or tokens.peek().isdigit()
+                if tokens.peek() in ("ip", "object-group")
+                or tokens.peek() in PROTOCOLS
+                or tokens.peek().isdigit()
                 else "standard"
             )
             rule_kind = kind or inferred
@@ -338,6 +362,10 @@ def parse_acl(value: str) -> Acl:
             protocol = None
             if rule_kind == "extended":
                 proto = tokens.take()
+                if proto == "object-group":
+                    raise InvalidNetworkInput(
+                        "Группы сервисов/протоколов не поддерживаются; IP-группы задаются вместо адреса."
+                    )
                 if proto != "ip":
                     protocol = PROTOCOLS.get(proto)
                     if protocol is None:
@@ -425,10 +453,20 @@ def check_conversation(
     *,
     forward_absent=False,
     reverse_absent=False,
+    object_group_value="",
 ) -> str:
+    active_values = ([] if forward_absent else [forward_value]) + (
+        [] if reverse_absent else [reverse_value]
+    )
+    groups = (
+        parse_object_groups(object_group_value)
+        if any(re.search(r"\bobject-group\b", value, re.I) for value in active_values)
+        else {}
+    )
+
     def parse_side(value, side):
         try:
-            return parse_acl(value)
+            return parse_acl(value, object_groups=groups)
         except AclSyntaxError as error:
             raise AclSyntaxError(error.line, error.rule, error.detail, side) from None
         except InvalidNetworkInput as error:
