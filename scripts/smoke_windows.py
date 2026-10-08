@@ -1101,13 +1101,16 @@ def run_ui_checks(binary: Path) -> tuple[list[str], list[dict]]:
                             user32.SetForegroundWindow(help_hwnd)
                             wait_until(lambda: user32.GetForegroundWindow() == help_hwnd)
                             write_clipboard("help copy sentinel")
-                            keys(0x11, ord("A"))
-                            keys(0x11, ord("C"))
-                            help_text = wait_until(
-                                lambda: value
-                                if (value := read_clipboard()) and "Как использовать" in value
-                                else None
-                            )
+
+                            def copied_help():
+                                # Foreground activation can precede Tk's after_idle text focus.
+                                # Retry the same user action; keep all content assertions below.
+                                keys(0x11, ord("A"))
+                                keys(0x11, ord("C"))
+                                value = read_clipboard()
+                                return value if value and "Как использовать" in value else None
+
+                            help_text = wait_until(copied_help)
                             assert "Пример" in help_text and "Что учитывать" in help_text
                             if tool == 4:
                                 assert "10.20.30.0/24" in help_text and "[LPM]" in help_text
