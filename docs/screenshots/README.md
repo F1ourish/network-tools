@@ -1,5 +1,23 @@
 # Снимки Network Tools
 
+## Версия 1.6.0
+
+Снимки настоящего опубликованного `NetworkTools.exe` из [GitHub Actions run 37948029963](https://github.com/F1ourish/network-tools/actions/runs/37948029963).
+Источник - artifact `NetworkTools-verification-main`, папка `smoke-results`.
+Платформа - Windows-2025Server-10.0.26100-SP0; DPI 96, ночная тема.
+
+Source commit: `75baa0f1a36049e64915a6c953b9ceaae9cb27c1`.
+SHA-256 EXE: `0acbfff50ac3d31b58a4bb8875ec768ca452465e7a97949f6f553c987e76069c`.
+
+| Файл в репозитории | Файл в артефакте |
+| --- | --- |
+| [free-ips-1.6.0.png](free-ips-1.6.0.png) | `smoke-results/free-ips-night.png` |
+| [free-ips-exclusions-1.6.0.png](free-ips-exclusions-1.6.0.png) | `smoke-results/free-ips-exclusions-night.png` |
+
+Вставлен только синтетический ARP 192.0.2.1/.2. Первый снимок показывает
+исключения .33/.34 и 250 кандидатов; второй - диапазоны и последнюю страницу
+из 28 адресов. Адреса в ARP не являются данными реального оборудования.
+
 ## Версия 1.5.1
 
 Снимки настоящего опубликованного `NetworkTools.exe` из [GitHub Actions run 37754564894](https://github.com/F1ourish/network-tools/actions/runs/37754564894).

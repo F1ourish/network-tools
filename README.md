@@ -77,6 +77,16 @@ ACL запросов/ответов, генератор паролей и пои
 
 ## Интерфейс
 
+Поиск адресов показан в опубликованном EXE 1.6.0 из [проверки на Windows](https://github.com/F1ourish/network-tools/actions/runs/37948029963).
+
+ARP с исключениями по умолчанию:
+
+![Поиск кандидатов IPv4 по ARP, версия 1.6.0](docs/screenshots/free-ips-1.6.0.png)
+
+Исключения диапазоном и последняя страница:
+
+![Исключения и страницы IPv4, версия 1.6.0](docs/screenshots/free-ips-exclusions-1.6.0.png)
+
 Генератор показан в опубликованном EXE 1.5.1 из [проверки на Windows](https://github.com/F1ourish/network-tools/actions/runs/37754564894).
 Остальные снимки относятся к версии 1.5.0: [проверка на Windows](https://github.com/F1ourish/network-tools/actions/runs/37745215699).
 Источник снимков: [описание](docs/screenshots/README.md).
