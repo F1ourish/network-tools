@@ -31,7 +31,7 @@ def generate(app):
 
 
 def test_password_starts_empty_hidden_and_copies_only_secret(app):
-    assert len(app.notebook.tabs()) == 6
+    assert len(app.notebook.tabs()) == 7
     assert app.password_length.get() == "20"
     assert app.password_result.get() == ""
     assert app.password_copy_button.instate(["disabled"])

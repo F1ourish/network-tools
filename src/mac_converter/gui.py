@@ -14,6 +14,15 @@ from .acl_editor import AclEditor, AutoScrollbar
 from .acl_objects import ObjectGroupSyntaxError, normalize_object_paste, parse_object_groups
 from .clipboard import ClipboardUnavailable, clear_if_matches
 from .help_content import TOOL_HELP
+from .free_ips import (
+    COPY_ALL_LIMIT,
+    DEFAULT_EXCLUSIONS,
+    ArpSyntaxError,
+    all_candidate_addresses,
+    calculate_free_ips,
+    free_ip_page,
+    normalize_arp_paste,
+)
 from .mac import InvalidMacAddress, format_mac
 from .passwords import (
     DEFAULT_SYMBOLS,
@@ -99,6 +108,10 @@ class MacConverterApp:
         self._copied_password = None
         self._clipboard_retries = 0
         self._acl_job = None
+        self._free_ip_job = None
+        self._syncing_free_ip = False
+        self.free_ip_calculation = None
+        self.free_ip_page_number = 0
         self._acl_editor_windows = {}
         self.acl_objects_window = None
         self.acl_objects_editor = None
@@ -172,6 +185,7 @@ class MacConverterApp:
                 self._build_routes,
                 self._build_acl,
                 self._build_passwords,
+                self._build_free_ips,
             ),
             self.pages,
             strict=True,
@@ -202,6 +216,7 @@ class MacConverterApp:
         self._routes_update()
         self._acl_update()
         self._acl_flow_update()
+        self._free_ip_update()
         self.status.set("Ready")
         root.minsize(820, 610)
         width = max(820, min(940, root.winfo_screenwidth() - 80))
@@ -250,7 +265,7 @@ class MacConverterApp:
                 return self.toggle_theme(event)
         elif event.keycode == 76:
             return self.focus_input(event)
-        elif 49 <= event.keycode <= 54:
+        elif 49 <= event.keycode < 49 + len(TOOL_HELP):
             return self.select_tool(event.keycode - 49)
         return None
 
@@ -1238,6 +1253,267 @@ class MacConverterApp:
         if self.acl_copy_button.instate(["!disabled"]):
             self._copy(self.acl_output.get("1.0", "end-1c"))
 
+    def _build_free_ips(self, page):
+        self.free_ip_network = tk.StringVar(self.root, value="192.168.1.0")
+        self.free_ip_mask = tk.StringVar(self.root, value="/24")
+        self.free_ip_exclusions = tk.StringVar(self.root, value=DEFAULT_EXCLUSIONS)
+        self.free_ip_error = tk.StringVar(self.root)
+        self.free_ip_summary = tk.StringVar(self.root)
+        self.free_ip_page_label = tk.StringVar(self.root)
+        self.free_ip_page_value = tk.StringVar(self.root, value="1")
+        inputs = ttk.Frame(page)
+        inputs.grid(row=0, column=0, sticky="ew", pady=(0, 10))
+        for column in range(2):
+            inputs.columnconfigure(column, weight=1, uniform="free_ip_fields")
+        self.free_ip_network_entry = self._field(inputs, "Сеть / IPv4 с CIDR", self.free_ip_network)
+        self.free_ip_mask_entry = self._field(
+            inputs,
+            "Маска подсети",
+            self.free_ip_mask,
+            1,
+            values=tuple(f"/{prefix}" for prefix in range(1, 33)),
+        )
+        exclusions = ttk.Frame(page)
+        exclusions.grid(row=1, column=0, sticky="ew")
+        exclusions.columnconfigure(0, weight=1)
+        self.free_ip_exclusions_entry = self._field(
+            exclusions, "Исключения", self.free_ip_exclusions
+        )
+        ttk.Label(
+            page,
+            text=".33, .34, .50-.60, 192.0.2.100-192.0.2.110; короткая запись - последний октет.",
+            bootstyle="secondary",
+            wraplength=780,
+        ).grid(row=2, column=0, sticky="ew", pady=(5, 7))
+        ttk.Label(page, textvariable=self.free_ip_error, bootstyle="danger", wraplength=780).grid(
+            row=3, column=0, sticky="ew"
+        )
+        ttk.Label(page, textvariable=self.free_ip_summary, wraplength=780).grid(
+            row=4, column=0, sticky="ew", pady=(0, 7)
+        )
+        lists = ttk.Frame(page)
+        lists.grid(row=5, column=0, sticky="nsew")
+        lists.rowconfigure(1, weight=1)
+        for column in range(2):
+            lists.columnconfigure(column, weight=1, uniform="free_ip_lists")
+        ttk.Label(lists, text="ARP-список").grid(row=0, column=0, sticky="w", pady=(0, 6))
+        ttk.Label(lists, text="Кандидаты по ARP").grid(row=0, column=1, sticky="w", pady=(0, 6))
+        self.free_ip_arp_editor = AclEditor(self, lists, height=6, changed=self._free_ip_changed)
+        self.free_ip_arp_editor.grid(row=1, column=0, sticky="nsew", padx=(0, 10))
+        self.free_ip_arp_input = self.free_ip_arp_editor.text
+        self.free_ip_arp_input.paste_normalizer = normalize_arp_paste
+        container, self.free_ip_output = self._text_widget(lists, height=6, readonly=True)
+        self.free_ip_output.configure(wrap="none")
+        container.grid(row=1, column=1, sticky="nsew")
+        actions = ttk.Frame(lists)
+        actions.grid(row=2, column=0, sticky="w", pady=(8, 0))
+        self.free_ip_paste_button = ttk.Button(
+            actions,
+            text="Вставить ARP",
+            command=lambda: self._paste(self.free_ip_arp_input, replace=True),
+        )
+        self.free_ip_paste_button.pack(side="left")
+        self.free_ip_clean_button = ttk.Button(
+            actions, text="Очистить вывод", command=self.clean_free_ip_arp
+        )
+        self.free_ip_clean_button.pack(side="left", padx=(5, 0))
+        self.free_ip_example_button = ttk.Button(
+            actions, text="Пример", command=self.free_ip_example
+        )
+        self.free_ip_example_button.pack(side="left", padx=(5, 0))
+        copies = ttk.Frame(lists)
+        copies.grid(row=2, column=1, sticky="w", pady=(8, 0))
+        self.free_ip_copy_page_button = ttk.Button(
+            copies, text="Копировать IP", command=self.copy_free_ip_page
+        )
+        self.free_ip_copy_page_button.pack(side="left")
+        self.free_ip_copy_all_button = ttk.Button(
+            copies, text="Все IP", command=self.copy_all_free_ips
+        )
+        self.free_ip_copy_all_button.pack(side="left", padx=(5, 0))
+        self.free_ip_copy_report_button = ttk.Button(
+            copies, text="Отчёт", command=self.copy_free_ip_report
+        )
+        self.free_ip_copy_report_button.pack(side="left", padx=(5, 0))
+        navigation = ttk.Frame(page)
+        navigation.grid(row=6, column=0, sticky="ew", pady=(9, 0))
+        self.free_ip_prev_button = ttk.Button(
+            navigation, text="Назад", command=lambda: self._free_ip_move(-1)
+        )
+        self.free_ip_prev_button.pack(side="left")
+        self.free_ip_next_button = ttk.Button(
+            navigation, text="Далее", command=lambda: self._free_ip_move(1)
+        )
+        self.free_ip_next_button.pack(side="left", padx=5)
+        self.free_ip_jump_entry = ttk.Entry(
+            navigation, textvariable=self.free_ip_page_value, width=8
+        )
+        self.free_ip_jump_entry.pack(side="left")
+        self._bind_selection(self.free_ip_jump_entry)
+        self.free_ip_jump_button = ttk.Button(
+            navigation, text="Перейти", command=self._free_ip_jump
+        )
+        self.free_ip_jump_button.pack(side="left", padx=5)
+        ttk.Label(navigation, textvariable=self.free_ip_page_label).pack(side="left", padx=(5, 0))
+        ttk.Label(
+            page,
+            text="Отсутствие в ARP не подтверждает свободный IP. Перед назначением сверить IPAM/DHCP и проверить конфликт.",
+            wraplength=780,
+            bootstyle="secondary",
+        ).grid(row=7, column=0, sticky="ew", pady=(9, 0))
+        self.free_ip_network.trace_add("write", self._free_ip_changed)
+        self.free_ip_mask.trace_add("write", self._free_ip_mask_changed)
+        self.free_ip_exclusions.trace_add("write", self._free_ip_changed)
+
+    def _cancel_free_ip_job(self):
+        if self._free_ip_job is not None:
+            self.root.after_cancel(self._free_ip_job)
+            self._free_ip_job = None
+
+    def _clear_free_ip_result(self):
+        self.free_ip_calculation = None
+        self.free_ip_page_number = 0
+        self.free_ip_summary.set("")
+        self.free_ip_page_label.set("")
+        self.free_ip_page_value.set("1")
+        self._set_text(self.free_ip_output, "")
+        for button in (
+            self.free_ip_copy_page_button,
+            self.free_ip_copy_all_button,
+            self.free_ip_copy_report_button,
+            self.free_ip_prev_button,
+            self.free_ip_next_button,
+            self.free_ip_jump_button,
+            self.free_ip_jump_entry,
+        ):
+            button.state(["disabled"])
+
+    def _free_ip_changed(self, *_args):
+        if self._syncing_free_ip:
+            return
+        self._cancel_free_ip_job()
+        self._clear_free_ip_result()
+        self.free_ip_error.set("")
+        self.free_ip_arp_editor.show_error()
+        self._free_ip_job = self.root.after(180, self._free_ip_update)
+
+    def _free_ip_mask_changed(self, *_args):
+        if self._syncing_free_ip:
+            return
+        if "/" in self.free_ip_network.get():
+            self._syncing_free_ip = True
+            self.free_ip_network.set(self.free_ip_network.get().split("/", 1)[0])
+            self._syncing_free_ip = False
+        self._free_ip_changed()
+
+    def _free_ip_update(self):
+        self._cancel_free_ip_job()
+        self._clear_free_ip_result()
+        self.free_ip_arp_editor.show_error()
+        raw = self.free_ip_arp_input.get("1.0", "end-1c")
+        if not raw.strip():
+            self.free_ip_error.set("")
+            self.free_ip_summary.set("Вставьте ARP-таблицу или список IPv4-адресов.")
+            return
+        try:
+            result = calculate_free_ips(
+                self.free_ip_network.get(),
+                raw,
+                self.free_ip_exclusions.get(),
+                self.free_ip_mask.get(),
+            )
+        except InvalidNetworkInput as error:
+            self.free_ip_error.set(str(error))
+            if isinstance(error, ArpSyntaxError):
+                self.free_ip_arp_editor.show_error(error.line)
+            return
+        if "/" in self.free_ip_network.get():
+            self._syncing_free_ip = True
+            self.free_ip_mask.set(f"/{result.network.prefixlen}")
+            self._syncing_free_ip = False
+        self.free_ip_error.set("")
+        self.free_ip_calculation = result
+        self.free_ip_summary.set(
+            f"{result.network} · ARP в подсети: {result.arp_in_subnet}; вне: {len(result.arp.addresses) - result.arp_in_subnet}. "
+            f"Исключения: {result.excluded_hosts}; кандидатов: {result.total}."
+        )
+        self._render_free_ip_page()
+
+    def _render_free_ip_page(self):
+        result = self.free_ip_calculation
+        if result is None:
+            return
+        page = free_ip_page(result, self.free_ip_page_number)
+        self._set_text(self.free_ip_output, "\n".join(page.addresses))
+        self.free_ip_page_label.set(
+            f"Страница {page.page + 1} / {page.pages} · IP: {len(page.addresses)}"
+        )
+        self.free_ip_page_value.set(str(page.page + 1))
+        self.free_ip_prev_button.state(["disabled"] if page.page == 0 else ["!disabled"])
+        self.free_ip_next_button.state(
+            ["disabled"] if page.page + 1 == page.pages else ["!disabled"]
+        )
+        self.free_ip_jump_entry.state(["!disabled"])
+        self.free_ip_jump_button.state(["!disabled"])
+        self.free_ip_copy_page_button.state(["!disabled"] if page.addresses else ["disabled"])
+        self.free_ip_copy_all_button.state(
+            ["!disabled"] if 0 < result.total <= COPY_ALL_LIMIT else ["disabled"]
+        )
+        self.free_ip_copy_report_button.state(["!disabled"])
+
+    def _free_ip_move(self, delta):
+        if self.free_ip_calculation is None:
+            return
+        page = free_ip_page(self.free_ip_calculation, self.free_ip_page_number)
+        target = page.page + delta
+        if 0 <= target < page.pages:
+            self.free_ip_page_number = target
+            self.free_ip_error.set("")
+            self._render_free_ip_page()
+
+    def _free_ip_jump(self):
+        if self.free_ip_calculation is None:
+            return
+        try:
+            text = self.free_ip_page_value.get().strip()
+            if not re.fullmatch(r"[0-9]{1,10}", text):
+                raise InvalidNetworkInput("Введите номер страницы.")
+            target = int(text) - 1
+            free_ip_page(self.free_ip_calculation, target)
+        except InvalidNetworkInput as error:
+            self.free_ip_error.set(str(error))
+            return
+        self.free_ip_page_number = target
+        self.free_ip_error.set("")
+        self._render_free_ip_page()
+
+    def clean_free_ip_arp(self):
+        value = normalize_arp_paste(self.free_ip_arp_input.get("1.0", "end-1c"))
+        self.free_ip_arp_editor.set_text(value)
+        self._free_ip_changed()
+
+    def free_ip_example(self):
+        self.free_ip_network.set("192.0.2.0/24")
+        self.free_ip_exclusions.set(DEFAULT_EXCLUSIONS)
+        self.free_ip_arp_editor.set_text(
+            "Internet 192.0.2.1 0 0011.2233.4401 ARPA Vlan10\n"
+            "Internet 192.0.2.2 2 0011.2233.4402 ARPA Vlan10\n"
+            "Internet 198.51.100.10 0 0011.2233.4410 ARPA Vlan20"
+        )
+        self._free_ip_changed()
+
+    def copy_free_ip_page(self):
+        if self.free_ip_copy_page_button.instate(["!disabled"]):
+            self._copy(self.free_ip_output.get("1.0", "end-1c"))
+
+    def copy_all_free_ips(self):
+        if self.free_ip_copy_all_button.instate(["!disabled"]):
+            self._copy("\n".join(all_candidate_addresses(self.free_ip_calculation)))
+
+    def copy_free_ip_report(self):
+        if self.free_ip_calculation is not None:
+            self._copy(self.free_ip_calculation.report(self.free_ip_page_number))
+
     def _build_passwords(self, page):
         self.password_length = tk.StringVar(self.root, value="20")
         self.password_groups = {
@@ -1466,6 +1742,7 @@ class MacConverterApp:
         self.status.set("Пароль очищен")
 
     def close(self):
+        self._cancel_free_ip_job()
         if self._acl_job is not None:
             self.root.after_cancel(self._acl_job)
             self._acl_job = None
@@ -1475,6 +1752,7 @@ class MacConverterApp:
 
     def _destroyed(self, event):
         if event.widget == self.root:
+            self._cancel_free_ip_job()
             if self._acl_job is not None:
                 self.root.after_cancel(self._acl_job)
                 self._acl_job = None
@@ -1764,6 +2042,8 @@ class MacConverterApp:
             self.copy_routes()
         elif index == 5:
             self.copy_password()
+        elif index == 6:
+            self.copy_free_ip_report()
         elif index == 4:
             self.copy_acl()
         elif self.mtu_calculation is not None:
@@ -1871,6 +2151,7 @@ class MacConverterApp:
             self.route_entry,
             self.acl_entry,
             self.password_length_entry,
+            self.free_ip_network_entry,
         )[index]
         entry.focus_set()
         entry.selection_range(0, tk.END)
@@ -1914,6 +2195,8 @@ class MacConverterApp:
         self.result.set("")
         self.copy_button.state(["disabled"])
         self.clear_password()
+        self._cancel_free_ip_job()
+        self._clear_free_ip_result()
         self.ipv4_calculation = None
         self.ipv4_binary.set("")
         for table in (

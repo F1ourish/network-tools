@@ -10,6 +10,7 @@ def test_help_covers_all_tools_and_promises_no_full_route_acl_simulation():
         "Маршруты",
         "ACL",
         "Пароли",
+        "Свободные IP",
     ]
     assert all(
         topic.purpose and topic.steps and topic.example and topic.limits for topic in TOOL_HELP

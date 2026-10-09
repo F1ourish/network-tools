@@ -507,6 +507,20 @@ def run_ui_checks(binary: Path) -> tuple[list[str], list[dict]]:
                             checks.append(
                                 "Reopen: saved night theme; IPv4 defaults restored; entered addresses not persisted"
                             )
+                            keys(0x11, ord("7"))
+                            assert_invalid_copy()
+                            focus_control(2)
+                            keys(0x11, ord("A"))
+                            keys(0x11, ord("C"))
+                            wait_until(lambda: read_clipboard() == ".33, .34")
+                            focus_control(3)
+                            write_clipboard("empty ARP sentinel")
+                            keys(0x11, ord("A"))
+                            keys(0x11, ord("C"))
+                            assert read_clipboard() == "empty ARP sentinel"
+                            checks.append(
+                                "Reopen: ARP/exclusions are not persisted; free-IP defaults and disabled copy restored"
+                            )
                             keys(0x11, ord("6"))
                             assert_invalid_copy()
                             checks.append("Reopen: password is empty, not persisted")
@@ -973,6 +987,84 @@ def run_ui_checks(binary: Path) -> tuple[list[str], list[dict]]:
                         checks.append(
                             "ACL EXE: cyclic group clears stale conclusion; restoring definitions recovers without restart"
                         )
+                        keys(0x11, ord("7"))
+                        assert_invalid_copy()
+                        paste("192.0.2.0/24")
+                        arp_values = (
+                            "switch#show ip arp 192.0.2.1\n"
+                            "Protocol Address Age Hardware Addr Type Interface\n"
+                            "  Internet 192.0.2.1 0 0011.2233.4401 ARPA Vlan10\n"
+                            "  Internet 192.0.2.2 - Incomplete ARPA Vlan10\n"
+                            "switch#\n"
+                        )
+                        paste_control(3, arp_values)
+                        copy_tool("Подсеть: 192.0.2.0/24", "Кандидатов по ARP: 250")
+                        focus_control(3)
+                        keys(0x11, ord("A"))
+                        keys(0x11, ord("C"))
+                        cleaned_arp = wait_until(
+                            lambda: value
+                            if (value := read_clipboard()) and value.startswith("Internet")
+                            else None
+                        )
+                        assert "switch#" not in cleaned_arp and "Protocol" not in cleaned_arp
+                        assert len(cleaned_arp.splitlines()) == 2 and "Incomplete" in cleaned_arp
+                        checks.append(
+                            "Free IP EXE: Ctrl+7/Ctrl+L and ARP paste remove CLI rows and keep incomplete entries occupied"
+                        )
+                        write_clipboard("free IP page sentinel")
+                        focus_control(8)
+                        keys(0x20)
+                        first_page = wait_until(
+                            lambda: value
+                            if (value := read_clipboard()) and value.startswith("192.0.2.3")
+                            else None
+                        ).splitlines()
+                        assert len(first_page) == 100
+                        assert "192.0.2.33" not in first_page and "192.0.2.34" not in first_page
+                        write_clipboard("free IP all sentinel")
+                        focus_control(9)
+                        keys(0x20)
+                        all_ips = wait_until(
+                            lambda: value
+                            if (value := read_clipboard()) and value.endswith("192.0.2.254")
+                            else None
+                        ).splitlines()
+                        assert len(all_ips) == 250 and len(set(all_ips)) == 250
+                        save_screenshot(hwnd, Path("smoke-results/free-ips-night.png"))
+                        checks.append(
+                            "Free IP EXE: default .33/.34 exclusions, current-page and all-address clipboard output"
+                        )
+                        paste_control(2, ".33,.34,.50-.60,192.0.2.100-192.0.2.110")
+                        copy_tool("Исключения охватывают: 24", "Кандидатов по ARP: 228")
+                        paste_control(12, "3")  # Prev disabled; Next, jump entry, jump button.
+                        focus_control(13)
+                        keys(0x20)
+                        copy_tool("Страница 3 / 3", "Кандидатов по ARP: 228")
+                        write_clipboard("last free IP page sentinel")
+                        focus_control(8)
+                        keys(0x20)
+                        last_page = wait_until(
+                            lambda: value
+                            if (value := read_clipboard()) and value.endswith("192.0.2.254")
+                            else None
+                        ).splitlines()
+                        assert len(last_page) == 28
+                        save_screenshot(hwnd, Path("smoke-results/free-ips-exclusions-night.png"))
+                        checks.append(
+                            "Free IP EXE: comma lists, short/full inclusive ranges and last-page jump/copy"
+                        )
+                        paste_control(2, ".80-.50")
+                        assert_invalid_copy()
+                        paste_control(2, ".33, .34")
+                        copy_tool("Кандидатов по ARP: 250")
+                        paste("0.0.0.0/1")
+                        copy_tool("Подсеть: 0.0.0.0/1", "Кандидатов по ARP: 2130706430")
+                        paste("192.0.2.0/24")
+                        copy_tool("Кандидатов по ARP: 250")
+                        checks.append(
+                            "Free IP EXE: invalid exclusions clear stale output and recover; /1 calculates without enumerating the network"
+                        )
                         # These are disposable test secrets; never print or capture them unmasked.
                         keys(0x11, ord("6"))
                         password_test_started = True
@@ -1092,6 +1184,7 @@ def run_ui_checks(binary: Path) -> tuple[list[str], list[dict]]:
                             (4, "Маршруты"),
                             (5, "ACL"),
                             (6, "Пароли"),
+                            (7, "Свободные IP"),
                         ):
                             keys(0x11, ord(str(tool)))
                             keys(0x70)  # F1.
@@ -1120,13 +1213,19 @@ def run_ui_checks(binary: Path) -> tuple[list[str], list[dict]]:
                                     and "ACL ответа" in help_text
                                     and "0.0.255.254" in help_text
                                 )
+                            elif tool == 7:
+                                assert (
+                                    ".33" in help_text
+                                    and "250" in help_text
+                                    and "IPAM/DHCP" in help_text
+                                )
                             save_screenshot(help_hwnd, Path(f"smoke-results/help-tool-{tool}.png"))
                             keys(0x1B)  # Escape.
                             wait_until(lambda: not user32.IsWindowVisible(help_hwnd))
                             user32.SetForegroundWindow(hwnd)
                             wait_until(lambda: user32.GetForegroundWindow() == hwnd)
                         checks.append(
-                            "Context help: F1, route/ACL/password examples, readonly copy and Escape"
+                            "Context help: F1, route/ACL/password/free-IP examples, readonly copy and Escape"
                         )
                         keys(0x11, ord("6"))
                         paste("20")
