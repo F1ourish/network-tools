@@ -222,3 +222,20 @@ def test_expansion_shortcut_is_available_in_route_and_arp_fields(app):
         view.text.event_generate("<Control-Return>")
         app.root.update()
         assert widget not in app._text_windows
+
+
+def test_wheel_over_cme_table_scrolls_result_without_moving_the_page(app):
+    activate(app, 7, "820x610")
+    app.cme_editor.set_text(EXAMPLE_CONFIG)
+    app._cme_config_changed()
+    app._cme_parse()
+    app.cme_mode.set("free")
+    app.root.update()
+    table = app.cme_table
+    canvas = app._canvases[7]
+    canvas.yview_moveto(0)
+    before = canvas.yview()
+    table.event_generate("<MouseWheel>", delta=-120)
+    app.root.update()
+    assert table.yview()[0] > 0
+    assert canvas.yview() == before

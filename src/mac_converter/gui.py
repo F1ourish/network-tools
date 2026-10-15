@@ -2244,7 +2244,7 @@ class MacConverterApp(CMEPanel):
 
     @staticmethod
     def _select_all(event):
-        if isinstance(event.widget, (tk.Text, ttk.Treeview)):
+        if isinstance(event.widget, tk.Text):
             event.widget.tag_add(tk.SEL, "1.0", "end-1c")
         else:
             event.widget.selection_range(0, tk.END)
@@ -2274,7 +2274,7 @@ class MacConverterApp(CMEPanel):
         return "break"
 
     def _scroll_tool(self, event):
-        if isinstance(event.widget, tk.Text):
+        if isinstance(event.widget, (tk.Text, ttk.Treeview)):
             return None
         canvas = self._canvases[self.notebook.index(self.notebook.select())]
         canvas.yview_scroll(-1 if event.delta > 0 else 1, "units")
