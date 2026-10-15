@@ -25,6 +25,8 @@ _HEADER = re.compile(r"(ephone-dn|ephone)\s+([0-9]+)(?:\s+(dual-line|octo-line))
 _PROMPT = re.compile(r"^\S+(?:\([^)]*\))?[>#]\s*")
 _BUTTON = re.compile(r"([0-9]+)([:bcfmoswx])([0-9]+(?:,[0-9]+)*)", re.I)
 _PHONE_TOKEN = re.compile(r"(?<![\w])\+?[0-9]+(?![\w])")
+PAIR_RESOURCE = "ephone / ephone-dn"
+RESOURCE_KINDS = (PAIR_RESOURCE, "Телефонные номера")
 
 
 class CMESyntaxError(InvalidNetworkInput):
@@ -64,6 +66,29 @@ class DirectoryNumber:
     description: str = ""
     name: str = ""
     label: str = ""
+    template: int | None = None
+    forwarding: dict[str, "CallForward | None"] = field(default_factory=dict)
+    effective_forwarding: tuple["CallForward", ...] = ()
+    forwarding_incomplete: bool = False
+    forwarding_clear: bool = False
+
+
+@dataclass(frozen=True)
+class CallForward:
+    kind: str
+    argument: str
+    line: int
+    template: int | None = None
+
+    def text(self) -> str:
+        label = {
+            "all": "Все вызовы",
+            "busy": "Если занято",
+            "noan": "Если нет ответа",
+            "night-service": "В ночном режиме",
+        }.get(self.kind, "Дополнительная настройка")
+        source = f"; шаблон ephone-dn-template {self.template}" if self.template is not None else ""
+        return f"{label} ({self.kind}): {self.argument}{source}; строка {self.line}"
 
 
 @dataclass
@@ -94,6 +119,7 @@ class CMEConfig:
     max_ephones: int | None
     has_sip: bool
     has_templates: bool
+    limitations: tuple[str, ...] = ()
 
     def summary(self) -> str:
         limits = f"max-dn: {self.max_dn if self.max_dn is not None else '?'}; max-ephones (кол-во): {self.max_ephones if self.max_ephones is not None else '?'}"
@@ -146,7 +172,7 @@ def parse_config(value: str) -> CMEConfig:
     lines = dedent(value).splitlines()
     if len(lines) > MAX_CONFIG_LINES:
         raise InvalidNetworkInput("CUCME: допускается не более 30000 строк.")
-    dns, phones, warnings = {}, {}, []
+    dns, phones, warnings, templates, limitations = {}, {}, [], {}, []
     current, context, max_dn, max_ephones = None, "", None, None
     has_sip = has_templates = False
     for line, raw in enumerate(lines, 1):
@@ -184,10 +210,27 @@ def parse_config(value: str) -> CMEConfig:
             continue
         if text.startswith("voice register "):
             has_sip = True
+            limitations.append(f"{text} (строка {line})")
             current, context = None, ""
             continue
         if text.startswith(("ephone-template ", "ephone-dn-template ")):
             has_templates = True
+            limitations.append(f"{text} (строка {line})")
+            token = text.split()[-1]
+            if text.startswith("ephone-dn-template "):
+                tag = _tag(token, line)
+                if (
+                    isinstance(current, DirectoryNumber)
+                    and context == "ephone-dn"
+                    and raw[:1].isspace()
+                ):
+                    current.template = tag
+                elif not raw[:1].isspace():
+                    if tag in templates:
+                        raise CMESyntaxError(line, f"повторный ephone-dn-template {tag}.")
+                    current = DirectoryNumber(tag, line)
+                    templates[tag], context = current, "ephone-dn-template"
+                continue
             if current is None or not raw[:1].isspace():
                 current, context = None, ""
             continue
@@ -210,6 +253,33 @@ def parse_config(value: str) -> CMEConfig:
                 current.number = current.secondary = ""
             elif text in ("no name", "no label", "no description"):
                 setattr(current, text[3:], "")
+            elif (
+                command == "call-forward"
+                or text == "no call-forward"
+                or text.startswith("no call-forward ")
+            ):
+                removed = command == "no"
+                args = (text[16:] if removed else argument).split(None, 1)
+                if not args:
+                    if removed:
+                        current.forwarding.clear()
+                        current.forwarding_clear = True
+                    else:
+                        raise CMESyntaxError(line, "после call-forward требуется условие и номер.")
+                else:
+                    kind = args[0].lower()
+                    if not removed and len(args) < 2:
+                        raise CMESyntaxError(line, f"после call-forward {kind} требуется значение.")
+                    current.forwarding[kind] = (
+                        None
+                        if removed
+                        else CallForward(
+                            kind,
+                            args[1],
+                            line,
+                            current.tag if context == "ephone-dn-template" else None,
+                        )
+                    )
             elif not raw[:1].isspace() and command not in (
                 "call-forward",
                 "pickup-group",
@@ -309,6 +379,20 @@ def parse_config(value: str) -> CMEConfig:
                 f"Номер секции ephone {phone.tag} исключён из списка свободных."
             )
     for dn in sorted(dns.values(), key=lambda item: item.tag):
+        inherited = {}
+        if dn.template is not None:
+            template = templates.get(dn.template)
+            if template is None:
+                dn.forwarding_incomplete = True
+                warnings.append(
+                    f"ephone-dn {dn.tag}: указан ephone-dn-template {dn.template}, но его содержимое не предоставлено.\n"
+                    "Добавьте секцию шаблона из show running-config, чтобы увидеть его переадресации."
+                )
+            else:
+                if not dn.forwarding_clear:
+                    inherited.update(template.forwarding)
+        inherited.update(dn.forwarding)
+        dn.effective_forwarding = tuple(value for value in inherited.values() if value is not None)
         if dn.tag not in referenced:
             links.append(Link(None, dn.tag))
         if not dn.number:
@@ -334,7 +418,13 @@ def parse_config(value: str) -> CMEConfig:
         )
     if has_sip or has_templates:
         warnings.append(
-            "SIP voice register/шаблоны не разворачиваются; показаны прямые SCCP-связи. Соответствующие свободные ресурсы блокируются."
+            "Обнаружены SIP-разделы или шаблоны. Это ограничение анализа, а не ошибка Cisco-конфига.\n"
+            "Таблица номеров секций ephone/ephone-dn доступна: учитываются явные секции SCCP и ссылки button.\n"
+            "Переадресации из предоставленных ephone-dn-template учитываются; прочие поля шаблонов и SIP-номера не разворачиваются.\n"
+            "Общий поиск свободных телефонных номеров недоступен, чтобы не предложить неучтённый SIP/шаблонный номер.\n"
+            "Где обнаружено: "
+            + "; ".join(limitations[:8])
+            + (f"; и ещё {len(limitations) - 8}" if len(limitations) > 8 else "")
         )
     if max_dn is not None and any(tag > max_dn for tag in dns.keys() | referenced):
         warnings.append(
@@ -350,6 +440,7 @@ def parse_config(value: str) -> CMEConfig:
         max_ephones,
         has_sip,
         has_templates,
+        tuple(limitations),
     )
 
 
@@ -401,12 +492,36 @@ def _notes(config: CMEConfig) -> list[str]:
     if not config.warnings:
         return []
     lines = ["", f"Замечания по всей конфигурации: {len(config.warnings)}."]
-    if len(config.warnings) > 20:
-        lines.append(f"Показаны первые 20 из {len(config.warnings)}.")
-    for index, warning in enumerate(config.warnings[:20], 1):
+    for index, warning in enumerate(config.warnings, 1):
         detail = warning.replace("\n", "\n   ")
         lines += ["", f"{index}. {detail}"]
     return lines
+
+
+def diagnostics_report(config: CMEConfig | None, error: str = "", raw: str = "") -> str:
+    lines = ["Замечания по конфигурации CUCME"]
+    if error:
+        lines += ["", "Не удалось выполнить выбранную операцию", error]
+        match = re.search(r"CUCME, строка ([0-9]+):", error)
+        if match:
+            line = int(match[1])
+            source = raw.splitlines()
+            if 1 <= line <= len(source):
+                lines += [f"Текст строки {line}: {source[line - 1][:240]}"]
+            lines += [
+                "Исправьте указанную строку или вставьте полный running-config. Строка подсвечена в редакторе."
+            ]
+        else:
+            lines += [
+                "Проверьте выбранный режим и границы диапазона. Сам конфиг сохранён в редакторе."
+            ]
+    if config is not None:
+        lines += _notes(config)
+        if not config.warnings and not error:
+            lines += ["", "Замечаний по разобранным секциям не найдено."]
+    elif not error:
+        lines += ["", "Вставьте конфигурацию для проверки."]
+    return "\n".join(lines)
 
 
 def lookup_report(
@@ -440,6 +555,7 @@ def lookup_report(
         elif phone:
             lines.append("button: привязки к ephone-dn не указаны.")
         if dn:
+            lines.append("")
             lines += [
                 f"ephone-dn {dn.tag}: существует в конфигурации (строка {dn.line}; {dn.mode or 'single-line'})",
                 f"Телефонный номер (number): {dn.number or 'не задан'}",
@@ -447,11 +563,22 @@ def lookup_report(
                 f"Описание (description): {dn.description or 'не указано'}",
                 f"Имя (name): {dn.name or 'не указано'}; подпись (label): {dn.label or 'не указана'}",
             ]
+            lines += ["Переадресации:"]
+            if dn.effective_forwarding:
+                lines += ["  " + item.text() for item in dn.effective_forwarding]
+                lines += [
+                    "  Значения timeout указаны в секундах; условия primary/secondary и dialplan-pattern сохранены."
+                ]
+            elif not dn.forwarding_incomplete:
+                lines += ["  Не заданы во вставленном конфиге."]
+            if dn.forwarding_incomplete:
+                lines += [
+                    "  Содержимое шаблона отсутствует - переадресации известны не полностью. Подробнее в «Замечаниях»."
+                ]
         elif link.dn is not None:
             lines.append(
                 f"ephone-dn {link.dn}: есть ссылка из button, но сама секция отсутствует во вставленном конфиге."
             )
-    lines += _notes(config)
     lines += [
         "",
         "Поиск по предоставленному снимку; регистрация телефона и фактическая занятость линии не проверяются.",
@@ -541,11 +668,11 @@ def free_numbers(config: CMEConfig, kind: str, first: str, last: str) -> FreeNum
             for token in numbers
             if re.fullmatch(r"[0-9]{1,16}", token) and str(int(token)).zfill(width) == token
         }
-    if (kind == "dn" and config.has_templates) or (
-        kind == "number" and (config.has_templates or config.has_sip)
-    ):
+    if kind == "number" and (config.has_templates or config.has_sip):
         raise InvalidNetworkInput(
-            "Найдены SIP voice register/ephone-template: неполная модель не позволяет определить свободные DN/номера. Поиск прямых SCCP-связей доступен."
+            "Поиск свободных телефонных номеров недоступен: конфиг содержит SIP voice register или шаблоны. "
+            "Их телефонные номера учитываются не полностью. Это ограничение приложения, а не ошибка конфига. "
+            "Выберите «ephone / ephone-dn»: поиск номеров секций SCCP работает. Подробности и строки - в «Замечаниях»."
         )
     intervals, cumulative, total, current = [], [], 0, low
     for number in [*sorted(value for value in occupied if low <= value <= high), high + 1]:
@@ -571,8 +698,95 @@ def free_report(config: CMEConfig, result: FreeNumbers, page: int = 0) -> tuple[
         "max-ephones ограничивает количество аппаратов; допустимые номера секций ephone зависят от платформы.",
         "",
         *values,
-        *_notes(config),
         "",
         "Перед назначением сверить полный актуальный конфиг и ограничения платформы.",
     ]
+    return "\n".join(lines), pages
+
+
+@dataclass(frozen=True)
+class SectionAvailability:
+    """Independent SCCP namespaces, aligned by numeric tag rather than button links."""
+
+    config: CMEConfig
+    first: int
+    last: int
+
+    @property
+    def total(self):
+        return self.last - self.first + 1
+
+    @property
+    def free_phones(self):
+        return self.total - sum(self.first <= tag <= self.last for tag in self.config.phones)
+
+    @property
+    def free_dns(self):
+        high = min(self.last, self.config.max_dn) if self.config.max_dn is not None else self.last
+        return max(0, high - self.first + 1) - sum(
+            self.first <= tag <= high for tag in self.config.dns.keys() | self.config.referenced_dns
+        )
+
+    def row(self, tag):
+        phone = self.config.phones.get(tag)
+        phone_status = f"✗ {tag} - секция существует" if phone else f"✓ {tag} - секция не создана"
+        if tag in self.config.dns:
+            dn_status = f"✗ {tag} - секция существует"
+        elif tag in self.config.referenced_dns:
+            dn_status = f"✗ {tag} - ссылка button"
+        elif self.config.max_dn is not None and tag > self.config.max_dn:
+            dn_status = f"✗ {tag} - выше max-dn {self.config.max_dn}"
+        else:
+            dn_status = f"✓ {tag} - секция не создана"
+        return str(tag), phone_status, dn_status
+
+    def page(self, page=0, size=100):
+        if type(size) is not int or not 1 <= size <= 1000:
+            raise InvalidNetworkInput("Размер страницы должен быть от 1 до 1000.")
+        pages = max(1, (self.total + size - 1) // size)
+        if type(page) is not int or not 0 <= page < pages:
+            raise InvalidNetworkInput(f"Номер страницы должен быть от 1 до {pages}.")
+        start = self.first + page * size
+        return tuple(self.row(tag) for tag in range(start, min(self.last + 1, start + size))), pages
+
+    def all_text(self):
+        if self.total > COPY_LIMIT:
+            raise InvalidNetworkInput(
+                "Таблица целиком копируется до 10000 строк; используйте страницы."
+            )
+        return "Номер\tephone\tephone-dn\n" + "\n".join(
+            "\t".join(self.row(tag)) for tag in range(self.first, self.last + 1)
+        )
+
+
+def section_availability(config: CMEConfig, first: str, last: str) -> SectionAvailability:
+    start, end = first.strip(), last.strip()
+    if not re.fullmatch(r"[0-9]{1,7}", start) or not re.fullmatch(r"[0-9]{1,7}", end):
+        raise InvalidNetworkInput("Номера секций: введите целые границы от 1 до 1000000.")
+    low, high = int(start), int(end)
+    if not 1 <= low <= high <= MAX_TAG:
+        raise InvalidNetworkInput(
+            "Номера секций: начало и конец должны быть от 1 до 1000000; начало не больше конца."
+        )
+    return SectionAvailability(config, low, high)
+
+
+def availability_report(result: SectionAvailability, page=0) -> tuple[str, int]:
+    rows, pages = result.page(page)
+    lines = [
+        f"Номера секций {result.first}-{result.last}. Страница {page + 1} / {pages}.",
+        f"Не созданы секции ephone: {result.free_phones}; ephone-dn: {result.free_dns}.",
+        "✓ секция не создана; ✗ секция существует, есть ссылка button или превышен max-dn.",
+        "Одинаковые номера в строке - сравнение двух независимых списков, а не привязка аппарата к DN.",
+        "",
+        "Номер\tephone\tephone-dn",
+        *("\t".join(row) for row in rows),
+        "",
+        "Статусы по вставленному снимку. Пустая секция и description FREE не освобождают номер секции.",
+    ]
+    if result.config.max_ephones is not None:
+        count, limit = len(result.config.phones), result.config.max_ephones
+        lines += [
+            f"max-ephones: создано {count} из {limit}; остаток ёмкости {max(0, limit - count)}. Это лимит количества аппаратов, не их номеров."
+        ]
     return "\n".join(lines), pages

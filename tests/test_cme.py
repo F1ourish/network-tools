@@ -6,6 +6,9 @@ from mac_converter.cme import (
     MAX_CONFIG_CHARS,
     MAX_CONFIG_LINES,
     CMESyntaxError,
+    diagnostics_report,
+    section_availability,
+    availability_report,
     find_links,
     free_numbers,
     free_report,
@@ -109,7 +112,8 @@ def test_reports_show_distinct_description_number_label_name_and_hardware():
     ):
         assert value in report
     assert pages == 1
-    assert "номер в описании отличается от назначенного" in report
+    assert "номер в описании отличается от назначенного" not in report
+    assert "номер в описании отличается от назначенного" in diagnostics_report(parse_config(CONFIG))
     empty, _ = lookup_report(parse_config(CONFIG), "no match")
     assert "Совпадений нет" in empty and "фрагменте" in empty
 
@@ -216,13 +220,13 @@ def test_sccp_limits_are_scoped_to_telephony_service_not_sip():
     assert free_numbers(config, "dn", "1", "3").all_numbers() == ("2", "3")
 
 
-def test_templates_keep_direct_phone_fields_but_block_incomplete_free_dn_inference():
+def test_templates_keep_direct_fields_and_do_not_block_explicit_sccp_section_numbers():
     config = parse_config(
         "ephone-dn 2\n number 1002\n!\nephone 7\n ephone-template 1\n type 7942\n button 1:2\n!"
     )
     assert config.phones[7].model == "7942" and find_links(config, "7", "ephone")[0].dn == 2
-    with pytest.raises(InvalidNetworkInput, match="шаблоны|SIP"):
-        free_numbers(config, "dn", "1", "3")
+    assert free_numbers(config, "dn", "1", "3").all_numbers() == ("1", "3")
+    assert "ограничение анализа" in diagnostics_report(config)
 
 
 def test_wildcard_number_does_not_generate_false_free_phone_numbers():
@@ -398,13 +402,127 @@ def test_notes_explicitly_cover_whole_config_and_are_separate_numbered_paragraph
     config = parse_config(
         "ephone 38\n description FREE\n!\nephone-dn 202\n number 31202\n description 31201\n!"
     )
-    report, _ = lookup_report(config, "202", "dn")
+    report = diagnostics_report(config)
     assert "Замечания по всей конфигурации: 2.\n\n1. ephone 38" in report
     assert "\n\n2. ephone-dn 202" in report
     assert "первые 20" not in report
     assert "\n   Описание (description): FREE" in report
     many = parse_config("\n!\n".join(f"ephone {i}" for i in range(1, 23)))
-    limited, _ = free_report(many, free_numbers(many, "ephone", "1", "25"))
+    limited = diagnostics_report(many)
     assert "Замечания по всей конфигурации: 22" in limited
-    assert "Показаны первые 20 из 22" in limited
-    assert "\n\n20. ephone 20" in limited and "\n\n21." not in limited
+    assert "Показаны первые" not in limited
+    assert "\n\n20. ephone 20" in limited and "\n\n22. ephone 22" in limited
+
+
+def test_paired_table_preserves_independent_namespaces_and_dangling_references():
+    config = parse_config(
+        "telephony-service\n max-dn 50\n!\nephone 47\n button 1:49\n!\nephone-dn 48\n number 31048\n!"
+    )
+    table = section_availability(config, "46", "51")
+    rows, pages = table.page()
+    assert pages == 1 and len(rows) == 6
+    assert rows[0] == ("46", "✓ 46 - секция не создана", "✓ 46 - секция не создана")
+    assert rows[1][1].startswith("✗ 47") and rows[1][2].startswith("✓ 47")
+    assert rows[2][1].startswith("✓ 48") and rows[2][2].startswith("✗ 48")
+    assert rows[3][2] == "✗ 49 - ссылка button"
+    assert rows[5][2] == "✗ 51 - выше max-dn 50"
+    assert table.free_phones == 5 and table.free_dns == 3
+    report, _ = availability_report(table)
+    assert "Номер\tephone\tephone-dn" in report
+    assert "не привязка аппарата к DN" in report
+    assert table.all_text().splitlines()[1].startswith("46\t✓ 46")
+
+
+def test_sip_and_templates_do_not_block_paired_or_individual_sccp_sections():
+    config = parse_config(
+        "voice register global\n max-dn 20\n!\nephone-dn-template 1\n call-forward busy 31900\n!\nephone-dn 47\n number 31047\n ephone-dn-template 1\n!\nephone 48\n!"
+    )
+    rows, _ = section_availability(config, "47", "49").page()
+    assert rows[0][1].startswith("✓ 47") and rows[0][2].startswith("✗ 47")
+    assert rows[1][1].startswith("✗ 48") and rows[1][2].startswith("✓ 48")
+    assert free_numbers(config, "dn", "47", "49").all_numbers() == ("48", "49")
+    notes = diagnostics_report(config)
+    assert "не ошибка Cisco-конфига" in notes
+    assert "voice register global (строка 1)" in notes
+    with pytest.raises(InvalidNetworkInput, match="Выберите «ephone / ephone-dn»"):
+        free_numbers(config, "number", "31000", "31999")
+
+
+@pytest.mark.parametrize(
+    "first,last", [("0", "10"), ("10", "1"), ("1", "1000001"), ("bad", "10"), ("1", "")]
+)
+def test_pair_range_rejects_invalid_boundaries(first, last):
+    with pytest.raises(InvalidNetworkInput):
+        section_availability(parse_config("ephone 1"), first, last)
+
+
+def test_pair_pages_stay_bounded_for_a_million_section_numbers():
+    result = section_availability(parse_config("ephone 1"), "1", "1000000")
+    rows, pages = result.page(9999)
+    assert pages == 10000 and len(rows) == 100 and rows[-1][0] == "1000000"
+    with pytest.raises(InvalidNetworkInput, match="10000 строк"):
+        result.all_text()
+    with pytest.raises(InvalidNetworkInput):
+        result.page(10000)
+
+
+def test_four_call_forward_conditions_are_retained_and_not_reserved_as_owned_numbers():
+    value = "ephone-dn 47\n number 31047\n call-forward all 31900\n call-forward busy 31901\n call-forward noan 31902 timeout 20 primary\n call-forward night-service 31903\n!"
+    config = parse_config(value)
+    report, _ = lookup_report(config, "47", "dn")
+    for text in [
+        "Все вызовы (all): 31900",
+        "Если занято (busy): 31901",
+        "Если нет ответа (noan): 31902 timeout 20 primary",
+        "В ночном режиме (night-service): 31903",
+    ]:
+        assert text in report
+    assert "timeout указаны в секундах" in report
+    assert free_numbers(config, "number", "31900", "31903").total == 4
+
+
+def test_call_forward_template_is_resolved_even_when_declared_later_with_direct_override():
+    value = "ephone-dn 47\n number 31047\n ephone-dn-template 3\n call-forward busy 31999\n no call-forward all\n!\nephone-dn-template 3\n call-forward all 31900\n call-forward busy 31901\n call-forward noan 31902 timeout 20\n!"
+    config = parse_config(value)
+    commands = {item.kind: item for item in config.dns[47].effective_forwarding}
+    assert set(commands) == {"busy", "noan"}
+    assert commands["busy"].argument == "31999" and commands["busy"].template is None
+    assert commands["noan"].template == 3 and commands["noan"].line == 10
+    assert 3 not in config.dns
+    report, _ = lookup_report(config, "47", "dn")
+    assert "шаблон ephone-dn-template 3" in report
+
+
+def test_missing_template_does_not_claim_forwarding_is_unconfigured():
+    config = parse_config("ephone-dn 47\n number 31047\n ephone-dn-template 3\n!")
+    report, _ = lookup_report(config, "47", "dn")
+    assert "переадресации известны не полностью" in report
+    assert "Не заданы" not in report
+    assert "его содержимое не предоставлено" in diagnostics_report(config)
+
+
+def test_forwarding_removal_and_unrelated_sections_do_not_leak_into_dn():
+    config = parse_config(
+        "ephone-dn-template 3\n call-forward busy 31901\n!\nephone-dn 47\n ephone-dn-template 3\n no call-forward\n call-forward noan 31902 timeout 15\n!\ninterface Gi0\n description Other\n call-forward all 31999\n!"
+    )
+    assert [item.kind for item in config.dns[47].effective_forwarding] == ["noan"]
+    report, _ = lookup_report(config, "47", "dn")
+    assert "31999" not in report and "31901" not in report
+
+
+def test_diagnostics_explains_the_physical_error_line_without_mixing_warnings_into_results():
+    raw = "ephone 47\n button bad\n!"
+    try:
+        parse_config(raw)
+    except CMESyntaxError as error:
+        notes = diagnostics_report(None, str(error), raw)
+    else:
+        pytest.fail("Invalid button was accepted")
+    assert "Текст строки 2:  button bad" in notes and "Исправьте указанную строку" in notes
+    config = parse_config("ephone 47\n description FREE\n!")
+    assert "Замечания по всей конфигурации" in diagnostics_report(config)
+    assert "Замечания по всей конфигурации" not in lookup_report(config, "47")[0]
+    assert (
+        "Замечания по всей конфигурации"
+        not in availability_report(section_availability(config, "46", "48"))[0]
+    )

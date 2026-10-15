@@ -3,6 +3,7 @@ import tkinter as tk
 
 import pytest
 
+from mac_converter.cme import PAIR_RESOURCE
 from mac_converter.cme_gui import EXAMPLE_CONFIG
 
 pytestmark = pytest.mark.gui
@@ -61,7 +62,8 @@ def test_queries_modes_tab_theme_and_errors_reuse_model_and_keep_config(app):
         assert app.cme_config_input.get("1.0", "end-1c") == EXAMPLE_CONFIG
     app.cme_search_kind.set("Имя / label")
     app.cme_free_mode_button.invoke()
-    assert "Свободные номера ephone-dn: 98" in output(app)
+    assert "ephone-dn: 98" in output(app)
+    assert app.cme_table.get_children()
     app.cme_first.set("bad")
     assert app.cme_error.get()
     assert output(app) == "" and app.cme_copy_button.instate(["disabled"])
@@ -107,7 +109,10 @@ def test_edit_invalidates_immediately_then_line_error_and_correction_preserve_in
     app.root.update()
     assert app.cme_config is None and output(app) == ""
     app._cme_parse()
-    assert app.cme_error.get() and app.cme_editor.error_line == 17
+    assert (
+        app.cme_error.get()
+        and app.cme_editor.error_line == EXAMPLE_CONFIG.splitlines().index(" button 1:85") + 1
+    )
     assert app.cme_config_input.get("1.0", "end-1c") == bad
     app.root.clipboard_clear()
     app.root.clipboard_append("sentinel")
@@ -121,12 +126,13 @@ def test_edit_invalidates_immediately_then_line_error_and_correction_preserve_in
 def test_free_resources_copy_and_limit_count_not_phone_tag(app):
     load(app)
     app.cme_mode.set("free")
-    app.cme_free_kind.set("Номера ephone")
+    app.cme_free_kind.set(PAIR_RESOURCE)
     app.cme_first.set("584")
     app.cme_last.set("586")
     assert app.cme_error.get() == ""
     app.cme_copy_numbers_button.invoke()
-    assert app.root.clipboard_get() == "584\n586"
+    copied = app.root.clipboard_get()
+    assert "584\t✓ 584" in copied and "585\t✗ 585" in copied and "586\t✓ 586" in copied
     app.cme_free_kind.set("Телефонные номера")
     app.cme_first.set("31084")
     app.cme_last.set("31086")
@@ -138,9 +144,9 @@ def test_free_resources_copy_and_limit_count_not_phone_tag(app):
 def test_pages_jump_report_shortcuts_and_readonly(app):
     load(app)
     app.cme_mode.set("free")
-    app.cme_free_kind.set("Номера ephone")
+    app.cme_free_kind.set(PAIR_RESOURCE)
     app.cme_last.set("1000")
-    assert app.cme_free_result.total == 998
+    assert app.cme_free_result.total == 1000
     app.cme_page_value.set("10")
     app.cme_jump_button.invoke()
     assert app.cme_page_number == 9 and "Страница 10 / 10" in output(app)
@@ -190,28 +196,29 @@ def test_large_free_list_can_copy_report_but_not_entire_list(app):
     assert app.cme_copy_button.instate(["!disabled"])
 
 
-def test_search_keyboard_traversal_can_reach_configuration_and_actions(app):
+def test_keyboard_shortcuts_reach_both_panes_and_expand_buttons_are_local(app):
     load(app)
     app.cme_query.set("585")
     app.root.update()
     assert app.cme_query_entry.tk_focusNext() == app.cme_search_selector
     assert app.cme_query_entry.tk_focusPrev() == app.cme_free_mode_button
-    assert app.cme_free_mode_button.tk_focusPrev() == app.cme_search_mode_button
-    assert app.cme_search_mode_button.tk_focusPrev() == app.cme_config_input
-    assert app.cme_search_selector.tk_focusNext() == app.cme_output
+    app.root.focus_force()
+    app.root.event_generate("<F4>")
+    app.root.update()
+    assert app.root.focus_get() == app.cme_config_input
+    app.root.event_generate("<F6>")
+    app.root.update()
+    assert app.root.focus_get() == app.cme_output
+    assert app.cme_expand_button.master is not app.cme_input_expand_button.master
     app.root.geometry("820x610")
     app.root.update()
-    button = app.cme_expand_button
-    assert button.winfo_ismapped()
-    assert button.winfo_rootx() >= app.root.winfo_rootx()
-    assert (
-        button.winfo_rootx() + button.winfo_width()
-        <= app.root.winfo_rootx() + app.root.winfo_width()
-    )
-    assert (
-        button.winfo_rooty() + button.winfo_height()
-        <= app.root.winfo_rooty() + app.root.winfo_height()
-    )
+    for button in (app.cme_input_expand_button, app.cme_expand_button):
+        assert button.winfo_ismapped()
+        assert app.root.winfo_rootx() <= button.winfo_rootx()
+        assert (
+            button.winfo_rootx() + button.winfo_width()
+            <= app.root.winfo_rootx() + app.root.winfo_width()
+        )
 
 
 def expanded(app):
@@ -257,7 +264,7 @@ def test_open_report_follows_search_pages_and_reports_errors_without_stale_copy(
     app.cme_query.set("760")
     assert expanded(app) == output(app) and "ephone 760: существует" in expanded(app)
     app.cme_mode.set("free")
-    app.cme_free_kind.set("Номера ephone")
+    app.cme_free_kind.set(PAIR_RESOURCE)
     app.cme_last.set("1000")
     next_button = app._cme_report_buttons[2][0]
     previous_button = app._cme_report_buttons[1][0]
@@ -275,7 +282,7 @@ def test_open_report_follows_search_pages_and_reports_errors_without_stale_copy(
     app.copy_cme_report()
     assert app.root.clipboard_get() == "sentinel"
     app.cme_first.set("1")
-    assert expanded(app) == output(app) and "Свободные номера ephone" in expanded(app)
+    assert expanded(app) == output(app) and "Номера секций" in expanded(app)
     assert app.cme_config is model
 
 
@@ -300,7 +307,7 @@ def test_open_report_clears_on_config_edit_parse_failure_and_explicit_clear(app)
 def test_report_shortcut_destroy_reopen_and_callback_failure_cleanup(app):
     load(app)
     app.cme_query.set("585")
-    for widget in (app.cme_query_entry, app.cme_config_input, app.cme_output):
+    for widget in (app.cme_query_entry, app.cme_output):
         widget.focus_force()
         widget.event_generate("<Control-Return>")
         app.root.update()
@@ -325,3 +332,130 @@ def test_empty_report_and_empty_query_do_not_offer_stale_copy(app):
     app.cme_query.set("")
     assert expanded(app) == output(app) and "Введите телефон" in expanded(app)
     assert app._cme_report_buttons[0][0].instate(["disabled"])
+
+
+def test_panes_fill_window_height_and_user_can_redistribute_it(app):
+    load(app)
+    app.cme_query.set("585")
+    app.root.geometry("820x610")
+    app.root.update()
+    small = app.cme_panes.winfo_height()
+    initial = app.cme_panes.sashpos(0)
+    app.cme_panes.sashpos(0, initial + 25)
+    app.root.update()
+    assert app.cme_panes.sashpos(0) >= initial + 20
+    app.root.geometry("940x690")
+    app.root.update()
+    assert app.cme_panes.winfo_height() > small + 30
+    assert app.pages[7].winfo_height() >= app._canvases[7].winfo_height()
+    assert app.cme_panes.winfo_height() > app.pages[7].winfo_height() / 2
+    assert app.cme_config_input.winfo_width() > 600
+
+
+def test_real_pair_table_and_expanded_table_show_same_rows_and_copy_tsv(app):
+    load(app)
+    app.cme_mode.set("free")
+    app.cme_first.set("84")
+    app.cme_last.set("86")
+    app.root.update()
+    assert app.cme_table.winfo_ismapped() and not app.cme_output.winfo_ismapped()
+    rows = [app.cme_table.item(item, "values") for item in app.cme_table.get_children()]
+    assert len(rows) == 3
+    assert rows[1][0] == "85" and rows[1][1].startswith("✓ 85") and rows[1][2].startswith("✗ 85")
+    app.open_cme_report()
+    app.root.update()
+    mirror = app.cme_expanded_view.table
+    assert [mirror.item(item, "values") for item in mirror.get_children()] == rows
+    app.cme_report_view.table.selection_set(app.cme_table.get_children()[1])
+    app.cme_report_view.copy_rows()
+    assert app.root.clipboard_get().splitlines() == ["Номер\tephone\tephone-dn", "\t".join(rows[1])]
+    app.cme_copy_numbers_button.invoke()
+    assert len(app.root.clipboard_get().splitlines()) == 4
+    app.cme_last.set("1000")
+    app._cme_move(1)
+    assert app.cme_expanded_view.rows == app.cme_report_view.rows
+    assert "Страница 2 / 10" in expanded(app)
+
+
+def test_expanded_config_is_editable_synchronized_and_clear_removes_both_undo_histories(app):
+    load(app)
+    app.cme_query.set("585")
+    app.open_cme_report()
+    app.cme_input_expand_button.invoke()
+    app.root.update()
+    editor = app.cme_expanded_editor
+    assert editor.text.get("1.0", "end-1c") == EXAMPLE_CONFIG
+    updated = EXAMPLE_CONFIG.replace("31900", "31999")
+    editor.text.delete("1.0", "end")
+    editor.text.insert("1.0", updated)
+    app.root.update()
+    app._cme_parse()
+    assert app.cme_config_input.get("1.0", "end-1c") == updated
+    assert "31999" in output(app) and expanded(app) == output(app)
+    app.cme_config_input.delete("1.0", "end")
+    app.cme_config_input.insert("1.0", EXAMPLE_CONFIG)
+    app.root.update()
+    app._cme_parse()
+    assert editor.text.get("1.0", "end-1c") == EXAMPLE_CONFIG
+    app.clear_cme_config()
+    assert editor.text.get("1.0", "end-1c") == ""
+    for text in (editor.text, app.cme_config_input):
+        with pytest.raises(tk.TclError):
+            text.edit_undo()
+    app.close_cme_input()
+    assert app.cme_input_window is None
+    app.set_theme("night")
+
+
+def test_diagnostics_window_is_separate_and_explains_sip_template_limit_without_blocking_tags(app):
+    value = (
+        EXAMPLE_CONFIG
+        + "voice register global\n max-dn 20\n!\nephone-template 1\n codec g711ulaw\n!\n"
+    )
+    load(app, value)
+    app.cme_query.set("585")
+    assert "Замечания по всей конфигурации" not in output(app)
+    app.cme_mode.set("free")
+    assert app.cme_error.get() == "" and app.cme_table.get_children()
+    app.open_cme_notes()
+    app.root.update()
+    app.cme_free_kind.set("Телефонные номера")
+    assert output(app) == "" and app.cme_error.get()
+    notes = app.cme_notes_output.get("1.0", "end-1c")
+    assert "не ошибка конфига" in notes and "Выберите «ephone / ephone-dn»" in notes
+    assert "voice register global (строка" in notes
+    assert app.cme_copy_button.instate(["disabled"])
+    app.cme_free_kind.set(PAIR_RESOURCE)
+    assert app.cme_error.get() == "" and app.cme_table.get_children()
+    assert "Не удалось выполнить" not in app.cme_notes_output.get("1.0", "end-1c")
+    app.clear_cme_config()
+    assert "Вставьте конфигурацию" in app.cme_notes_output.get("1.0", "end-1c")
+    app.close_cme_notes()
+    app.set_theme("day")
+
+
+def test_notes_follow_physical_parse_error_and_both_editors_highlight_it(app):
+    load(app)
+    app.open_cme_input()
+    app.open_cme_notes()
+    bad = EXAMPLE_CONFIG.replace("button 1:85", "button bad")
+    app.cme_editor.set_text(bad)
+    app._cme_config_changed()
+    app._cme_parse()
+    line = bad.splitlines().index(" button bad") + 1
+    assert app.cme_editor.error_line == app.cme_expanded_editor.error_line == line
+    notes = app.cme_notes_output.get("1.0", "end-1c")
+    assert f"Текст строки {line}:  button bad" in notes
+    assert "Исправьте указанную строку" in notes
+    assert output(app) == "" and app.cme_config_input.get("1.0", "end-1c") == bad
+    app._report_callback_error(RuntimeError, RuntimeError("test"), None)
+    assert "Внутренняя ошибка" in app.cme_notes_output.get("1.0", "end-1c")
+
+
+def test_lookup_displays_configured_forwarding_without_config_warnings(app):
+    load(app)
+    app.cme_query.set("585")
+    assert "Если занято (busy): 31900" in output(app)
+    assert "Если нет ответа (noan): 31901 timeout 20" in output(app)
+    assert "Замечания по всей конфигурации" not in output(app)
+    assert app.cme_output.tag_ranges("heading")

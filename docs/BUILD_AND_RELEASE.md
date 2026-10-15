@@ -4,7 +4,7 @@
 
 Выпуск проходит через тесты исходников, запуск готового EXE и проверку hashes.
 Публикуется точный source commit, для которого Windows job сформировал assets.
-Целевая версия - 1.7.1; статус конкретной проверки - VALIDATION_1_7_1.md.
+Целевая версия - 1.8.0; статус конкретной проверки - VALIDATION_1_8_0.md.
 
 ## Подготовка и сборка
 
@@ -38,7 +38,7 @@ Win32 smoke запускает EXE в новой папке с пробелам�
 | Файл | Назначение |
 | --- | --- |
 | dist/NetworkTools.exe | Standalone GUI x64 |
-| dist/NetworkTools-1.7.1-windows-x64.zip | EXE, инструкция, notices и verification report |
+| dist/NetworkTools-1.8.0-windows-x64.zip | EXE, инструкция, notices и verification report |
 | dist/RELEASE_VERIFICATION.json | Version, source commit, runner, dependencies, pytest summary, actual smoke checks |
 | dist/SHA256SUMS.txt | SHA-256 EXE, ZIP и verification JSON |
 | smoke-results/pytest.xml | Фактические результаты pytest |
@@ -51,7 +51,7 @@ ZIP и sums создаются только после successful smoke. Failed 
 
 ```powershell
 Get-FileHash .\dist\NetworkTools.exe -Algorithm SHA256
-Get-FileHash .\dist\NetworkTools-1.7.1-windows-x64.zip -Algorithm SHA256
+Get-FileHash .\dist\NetworkTools-1.8.0-windows-x64.zip -Algorithm SHA256
 Get-Content .\dist\SHA256SUMS.txt
 ```
 
@@ -75,7 +75,7 @@ Linux проверяет Ruff и все non-GUI tests. Windows обязател�
 | Artifact | Содержимое при распаковке |
 | --- | --- |
 | NetworkTools-windows-x64-<ref> | NetworkTools.exe в корне |
-| NetworkTools-portable-<ref> | NetworkTools-1.7.1-windows-x64.zip в корне |
+| NetworkTools-portable-<ref> | NetworkTools-1.8.0-windows-x64.zip в корне |
 | NetworkTools-verification-<ref> | dist/SHA256SUMS.txt, dist/RELEASE_VERIFICATION.json и smoke-results/ |
 
 Publisher скачивает первые два artifact в verified/dist, третий в verified.
@@ -88,7 +88,7 @@ assets, версию, source commit, successful smoke и hash проверенн
 `gh release create` создаёт v<version> для точного github.sha и прикладывает
 четыре assets. Existing release/tag не перезаписывается; при занятой версии
 устранить причину и выпустить новую версию. Тег при отдельном tag build должен
-совпадать с __version__. Publisher выбирает docs/RELEASE_<версия>.md; для 1.7.1 - docs/RELEASE_1_7_1.md.
+совпадать с __version__. Publisher выбирает docs/RELEASE_<версия>.md; для 1.8.0 - docs/RELEASE_1_8_0.md.
 
 После выпуска проверить страницу Release, target commit, имена и hashes assets.
 GitHub artifact имеет retention; Release assets являются основной поставкой.

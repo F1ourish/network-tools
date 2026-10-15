@@ -166,12 +166,14 @@ class MacConverterApp(CMEPanel):
             content = canvas.create_window(0, 0, window=page, anchor="nw")
             page.bind(
                 "<Configure>",
-                lambda event, surface=canvas: surface.configure(scrollregion=surface.bbox("all")),
+                lambda event, surface=canvas, panel=page, item=content: self._fit_tool_page(
+                    surface, panel, item
+                ),
             )
             canvas.bind(
                 "<Configure>",
-                lambda event, surface=canvas, item=content: surface.itemconfigure(
-                    item, width=event.width
+                lambda event, surface=canvas, panel=page, item=content: self._fit_tool_page(
+                    surface, panel, item
                 ),
             )
             page.columnconfigure(0, weight=1)
@@ -227,6 +229,17 @@ class MacConverterApp(CMEPanel):
         y = max(0, (root.winfo_screenheight() - height - 90) // 2)
         root.geometry(f"{width}x{height}+{x}+{y}")
         root.after_idle(self.input_entry.focus_set)
+
+    @staticmethod
+    def _fit_tool_page(canvas, page, item):
+        width = max(1, canvas.winfo_width())
+        height = max(canvas.winfo_height(), page.winfo_reqheight())
+        if (
+            int(float(canvas.itemcget(item, "width"))) != width
+            or int(float(canvas.itemcget(item, "height"))) != height
+        ):
+            canvas.itemconfigure(item, width=width, height=height)
+        canvas.configure(scrollregion=(0, 0, width, height))
 
     def _bind_selection(self, widget):
         widget.bind("<Control-a>", self._select_all)
@@ -2140,7 +2153,7 @@ class MacConverterApp(CMEPanel):
 
     @staticmethod
     def _select_all(event):
-        if isinstance(event.widget, tk.Text):
+        if isinstance(event.widget, (tk.Text, ttk.Treeview)):
             event.widget.tag_add(tk.SEL, "1.0", "end-1c")
         else:
             event.widget.selection_range(0, tk.END)
@@ -2207,6 +2220,10 @@ class MacConverterApp(CMEPanel):
         self._cancel_cme_job()
         self.cme_config = None
         self._cme_clear_result()
+        self.cme_error.set(
+            "Внутренняя ошибка приложения. Результат очищен; конфиг сохранён. Повторите операцию или сообщите об ошибке."
+        )
+        self._cme_update_notes()
         self.ipv4_calculation = None
         self.ipv4_binary.set("")
         for table in (
