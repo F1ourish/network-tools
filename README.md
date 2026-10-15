@@ -117,6 +117,16 @@ Ctrl+Shift+C копирует отчёт текущей страницы; **«В
 
 ## Интерфейс
 
+CUCME показан в опубликованном EXE 1.7.0 из [проверки на Windows](https://github.com/F1ourish/network-tools/actions/runs/38721324422).
+
+Поиск ephone и связанных DN:
+
+![CUCME: поиск аппарата и DN, версия 1.7.0](docs/screenshots/cme-lookup-1.7.0.png)
+
+Свободные ID ephone-dn:
+
+![CUCME: свободные ID DN, версия 1.7.0](docs/screenshots/cme-free-1.7.0.png)
+
 Поиск адресов показан в опубликованном EXE 1.6.0 из [проверки на Windows](https://github.com/F1ourish/network-tools/actions/runs/37948029963).
 
 ARP с исключениями по умолчанию:

@@ -1,5 +1,24 @@
 # Снимки Network Tools
 
+## Версия 1.7.0
+
+Снимки настоящего опубликованного `NetworkTools.exe` из [GitHub Actions run 38721324422](https://github.com/F1ourish/network-tools/actions/runs/38721324422).
+Источник - artifact `NetworkTools-verification-main`, папка `smoke-results`.
+Платформа - Windows-2025Server-10.0.26100-SP0; DPI 96, ночная тема.
+
+Source commit: `d7f7d0c5e97bca55d9c8f31a48a3b9cf5e4fd430`.
+SHA-256 EXE: `4b03bd17aa1b46b85bc67586d9b4e74c0de5464efe97b2e6237d12e0cf159a59`.
+
+| Файл в репозитории | Файл в артефакте |
+| --- | --- |
+| [cme-lookup-1.7.0.png](cme-lookup-1.7.0.png) | `smoke-results/cme-lookup-night.png` |
+| [cme-free-1.7.0.png](cme-free-1.7.0.png) | `smoke-results/cme-free-night.png` |
+
+Конфигурация синтетическая: Example Alex, ephone 585, DN 85, тестовый MAC,
+description 32085 и number 31085. Свободные DN в 1-100: 98 ID, включая
+резервирование пустой существующей секции DN 30. Реальные пользовательские
+конфигурации в снимки, тесты и поставку не включены.
+
 ## Версия 1.6.0
 
 Снимки настоящего опубликованного `NetworkTools.exe` из [GitHub Actions run 37948029963](https://github.com/F1ourish/network-tools/actions/runs/37948029963).
