@@ -274,25 +274,6 @@ def run_ui_checks(binary: Path) -> tuple[list[str], list[dict]]:
         for _ in range(tab_count):
             keys(0x09)
 
-    class GUIThreadInfo(ct.Structure):
-        _fields_ = (
-            [("cbSize", wt.DWORD), ("flags", wt.DWORD)]
-            + [
-                (name, wt.HWND)
-                for name in (
-                    "hwndActive",
-                    "hwndFocus",
-                    "hwndCapture",
-                    "hwndMenuOwner",
-                    "hwndMoveSize",
-                    "hwndCaret",
-                )
-            ]
-            + [("rcCaret", wt.RECT)]
-        )
-
-    user32.GetGUIThreadInfo.argtypes = [wt.DWORD, ct.POINTER(GUIThreadInfo)]
-    user32.GetGUIThreadInfo.restype = wt.BOOL
     user32.GetParent.argtypes = [wt.HWND]
     user32.GetParent.restype = wt.HWND
     user32.SetCursorPos.argtypes = [ct.c_int, ct.c_int]
@@ -303,17 +284,41 @@ def run_ui_checks(binary: Path) -> tuple[list[str], list[dict]]:
         assert user32.GetWindowRect(window, ct.byref(bounds))
         return bounds
 
-    def focused_field(function_key, ancestors):
-        keys(function_key)
-        info = GUIThreadInfo(cbSize=ct.sizeof(GUIThreadInfo))
-        assert user32.GetGUIThreadInfo(0, ct.byref(info)) and info.hwndFocus
-        text_window = area = info.hwndFocus
-        for _ in range(ancestors):
-            area = user32.GetParent(area)
-            assert area
-        bounds = window_bounds(area)
-        assert bounds.right - bounds.left > 300 and bounds.bottom - bounds.top > 40
-        return text_window, area
+    def child_windows(parent):
+        found = []
+
+        @callback_type
+        def visit(child, _parameter):
+            if user32.IsWindowVisible(child):
+                found.append(child)
+            return True
+
+        user32.EnumChildWindows(parent, visit, 0)
+        return found
+
+    def cme_field(index):
+        # Tk routes logical widget focus through the native top-level HWND.
+        # Locate each area's unique 9x9 corner instead of using GetFocus.
+        keys(0x73 if index == 0 else 0x75)
+        areas = set()
+        for child in child_windows(hwnd):
+            bounds = window_bounds(child)
+            if bounds.right - bounds.left == 9 and bounds.bottom - bounds.top == 9:
+                area = user32.GetParent(child)
+                outer = window_bounds(area)
+                if outer.right - outer.left > 300 and outer.bottom - outer.top > 40:
+                    areas.add(area)
+        assert len(areas) == 2, f"Expected two visible CUCME field corners, found {len(areas)}"
+        area = sorted(areas, key=lambda item: window_bounds(item).top)[index]
+        bodies = []
+        for child in child_windows(area):
+            if user32.GetParent(child) != area:
+                continue
+            bounds = window_bounds(child)
+            if bounds.right - bounds.left > 90 and bounds.bottom - bounds.top > 35:
+                bodies.append(child)
+        assert len(bodies) == 1, f"Expected one content frame in field {index}, found {len(bodies)}"
+        return bodies[0], area
 
     def mouse_button(down):
         event = Input(type=0, data=InputUnion(mi=MouseInput(dwFlags=2 if down else 4)))
@@ -1318,13 +1323,13 @@ def run_ui_checks(binary: Path) -> tuple[list[str], list[dict]]:
                         checks.append(
                             "CME layout EXE: main window maximizes with the adjustable input/result workspace and retains the current report"
                         )
-                        config_hwnd, input_area = focused_field(0x73, 2)
+                        config_hwnd, input_area = cme_field(0)
                         before = window_bounds(config_hwnd)
                         area = window_bounds(input_area)
                         drag_pointer((area.left + area.right) // 2, area.bottom - 4, 0, 24)
                         after = window_bounds(config_hwnd)
                         assert after.bottom - after.top > before.bottom - before.top + 12
-                        result_hwnd, result_area = focused_field(0x75, 3)
+                        result_hwnd, result_area = cme_field(1)
                         before = window_bounds(result_hwnd)
                         area = window_bounds(result_area)
                         drag_pointer((area.left + area.right) // 2, area.top + 4, 0, -24)
@@ -1355,6 +1360,7 @@ def run_ui_checks(binary: Path) -> tuple[list[str], list[dict]]:
                         checks.append(
                             "Field resizing EXE: native mouse drags resize CUCME input and result vertically, horizontally and diagonally; double-click restores automatic width without changing data"
                         )
+                        keys(0x75)
                         keys(0x11, 0x0D)
                         report_hwnd = activate_cme_window("Отчёт CUCME")
                         wait_until(lambda: user32.IsZoomed(report_hwnd))
