@@ -1136,6 +1136,17 @@ def run_ui_checks(binary: Path) -> tuple[list[str], list[dict]]:
 
                             wait_until(selected)
 
+                        def set_cme_bound(index, value):
+                            def entered():
+                                paste_control(index, value)
+                                focus_control(index)
+                                write_clipboard("CME bound readback sentinel")
+                                keys(0x11, ord("A"))
+                                keys(0x11, ord("C"))
+                                return read_clipboard() == value
+
+                            wait_until(entered)
+
                         def select_cme_free_kind(index, label):
                             def selected():
                                 focus_control(0)
@@ -1253,8 +1264,8 @@ def run_ui_checks(binary: Path) -> tuple[list[str], list[dict]]:
                         focus_control(0)
                         keys(0x10, 0x09)
                         keys(0x20)  # Free mode.
-                        paste("46")
-                        paste_control(1, "49")
+                        set_cme_bound(0, "46")
+                        set_cme_bound(1, "49")
                         pair_report = copy_tool("Номера секций 46-49", "47\t✗ 47", "48\t✓ 48")
                         keys(0x75)  # F6 focuses the real table, not its hidden text export.
                         table_text = read_cme_text(
@@ -1275,8 +1286,8 @@ def run_ui_checks(binary: Path) -> tuple[list[str], list[dict]]:
                         checks.append(
                             "CME table EXE: native Treeview and expanded view align both-free and independently occupied ephone/DN cells; selection copies TSV"
                         )
-                        paste("1")
-                        paste_control(1, "1000")
+                        set_cme_bound(0, "1")
+                        set_cme_bound(1, "1000")
                         copy_tool("Номера секций 1-1000", "Страница 1 / 10")
                         keys(0x75)
                         for _ in range(3):
@@ -1287,8 +1298,8 @@ def run_ui_checks(binary: Path) -> tuple[list[str], list[dict]]:
                             "CME table EXE: a thousand section numbers use ten bounded pages and the Next action updates the report"
                         )
                         select_cme_free_kind(1, "Телефонные номера")
-                        paste("31084")
-                        paste_control(1, "31086")
+                        set_cme_bound(0, "31084")
+                        set_cme_bound(1, "31086")
                         copy_tool("Свободные телефонные номера: 2")
                         keys(0x75)
                         keys(0x09)
@@ -1298,7 +1309,7 @@ def run_ui_checks(binary: Path) -> tuple[list[str], list[dict]]:
                             lambda: (value := read_clipboard()) is not None
                             and value.replace("\r\n", "\n") == "31084\n31086"
                         )
-                        paste("bad")
+                        set_cme_bound(0, "bad")
                         assert_invalid_copy()
                         checks.append(
                             "CME EXE: free telephone mode retains numeric copy and invalid ranges disable stale copying"
@@ -1309,8 +1320,8 @@ def run_ui_checks(binary: Path) -> tuple[list[str], list[dict]]:
                         )
                         paste_cme_config(limited_cme)
                         select_cme_free_kind(0, "ephone / ephone-dn")
-                        paste("46")
-                        paste_control(1, "49")
+                        set_cme_bound(0, "46")
+                        set_cme_bound(1, "49")
                         copy_tool("Номера секций 46-49", "47\t✗ 47", "48\t✓ 48")
                         select_cme_free_kind(1, "Телефонные номера")
                         assert_invalid_copy()

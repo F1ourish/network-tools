@@ -514,6 +514,10 @@ class CMEPanel:
             self.cme_free_frame.grid_remove()
             self.cme_search_frame.grid()
         self._cme_controls_changed()
+        # Map the newly selected fields before accepting Ctrl+L / paste.
+        self.root.update_idletasks()
+        if self.notebook.index(self.notebook.select()) == 7:
+            self.focus_input()
 
     def _cme_controls_changed(self, *_args):
         self.cme_page_number = 0

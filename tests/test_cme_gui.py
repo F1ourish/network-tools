@@ -62,6 +62,8 @@ def test_queries_modes_tab_theme_and_errors_reuse_model_and_keep_config(app):
         assert app.cme_config_input.get("1.0", "end-1c") == EXAMPLE_CONFIG
     app.cme_search_kind.set("Имя / label")
     app.cme_free_mode_button.invoke()
+    app.root.update()
+    assert app.root.focus_get() == app.cme_first_entry
     assert "ephone-dn: 98" in output(app)
     assert app.cme_table.get_children()
     app.cme_first.set("bad")
