@@ -1,5 +1,27 @@
 # Снимки Network Tools
 
+## Версия 1.8.0
+
+Снимки опубликованного `NetworkTools.exe` из [GitHub Actions run 38753046220](https://github.com/F1ourish/network-tools/actions/runs/38753046220).
+Источник - artifact `NetworkTools-verification-main`, папка `smoke-results`.
+Платформа - Windows-2025Server-10.0.26100-SP0; DPI 96, ночная тема.
+
+Source commit: `6cd47dcd93a125162414cb28b62287664371ebc7`.
+SHA-256 EXE: `f2340d368ed1bdec2fe342b7bd7b4e585f130d595ebcd2c52148c5a4764944ec`.
+
+| Файл в репозитории | Файл в артефакте |
+| --- | --- |
+| [cme-pairs-1.8.0.png](cme-pairs-1.8.0.png) | `smoke-results/cme-pairs-expanded-night.png` |
+| [cme-input-1.8.0.png](cme-input-1.8.0.png) | `smoke-results/cme-config-editor-night.png` |
+| [cme-notes-1.8.0.png](cme-notes-1.8.0.png) | `smoke-results/cme-notes-night.png` |
+| [cme-limits-1.8.0.png](cme-limits-1.8.0.png) | `smoke-results/cme-limit-notes-night.png` |
+
+Данные синтетические: Example Alex, ephone 585, DN 85, тестовый MAC;
+number 31085 и description 32085. Для таблицы созданы ephone 47 и DN 48,
+для диагностики - описание FREE и отдельные SIP/шаблонные разделы.
+Переадресация busy изменена в большом редакторе на синтетический номер 31999.
+Пользовательские конфиги и скриншоты в поставку не включены.
+
 ## Версия 1.7.1
 
 Снимки опубликованного `NetworkTools.exe` из [GitHub Actions run 38728763689](https://github.com/F1ourish/network-tools/actions/runs/38728763689).

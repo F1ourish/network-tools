@@ -113,19 +113,23 @@ Ctrl+Shift+C - отчёт страницы. Таблица копируется 
 
 ## Интерфейс
 
-CUCME показан в опубликованном EXE 1.7.1 из [проверки на Windows](https://github.com/F1ourish/network-tools/actions/runs/38728763689).
+CUCME показан в опубликованном EXE 1.8.0 из [проверки на Windows](https://github.com/F1ourish/network-tools/actions/runs/38753046220).
 
-Кнопка большого отчёта на вкладке:
+Рабочая область растёт вместе с окном; разделитель меняет размеры ввода и результата.
 
-![CUCME: вкладка и кнопка разворачивания, версия 1.7.1](docs/screenshots/cme-lookup-1.7.1.png)
+Парная таблица номеров секций:
 
-Отчёт в отдельном окне на весь экран:
+![CUCME: независимые статусы ephone и DN, версия 1.8.0](docs/screenshots/cme-pairs-1.8.0.png)
 
-![CUCME: большое окно отчёта, версия 1.7.1](docs/screenshots/cme-report-1.7.1.png)
+Большой редактируемый ввод:
 
-Подробные замечания с описанием и значениями полей:
+![CUCME: редактор конфигурации, версия 1.8.0](docs/screenshots/cme-input-1.8.0.png)
 
-![CUCME: понятные замечания, версия 1.7.1](docs/screenshots/cme-report-notes-1.7.1.png)
+Отдельные замечания и пояснение ограничений:
+
+![CUCME: замечания, версия 1.8.0](docs/screenshots/cme-notes-1.8.0.png)
+
+![CUCME: причина ограничения и доступный режим, версия 1.8.0](docs/screenshots/cme-limits-1.8.0.png)
 
 Поиск адресов показан в опубликованном EXE 1.6.0 из [проверки на Windows](https://github.com/F1ourish/network-tools/actions/runs/37948029963).
 
