@@ -5,6 +5,8 @@ from tkinter import font
 
 import ttkbootstrap as ttk
 
+from .panels import ResizableArea
+
 
 class AutoScrollbar(ttk.Scrollbar):
     def set(self, first, last):
@@ -15,18 +17,20 @@ class AutoScrollbar(ttk.Scrollbar):
         super().set(first, last)
 
 
-class AclEditor(ttk.Frame):
+class AclEditor(ResizableArea):
     def __init__(self, app, parent, *, height=7, changed=None):
-        super().__init__(parent)
+        super().__init__(app, parent, height=height * 19 + 20)
         self.app, self.changed = app, changed
         self.error_line = None
         self._draw_job = None
-        self.columnconfigure(1, weight=1)
-        self.rowconfigure(0, weight=1)
-        self.gutter = tk.Canvas(self, width=38, height=1, highlightthickness=0, takefocus=False)
+        self.body.columnconfigure(1, weight=1)
+        self.body.rowconfigure(0, weight=1)
+        self.gutter = tk.Canvas(
+            self.body, width=38, height=1, highlightthickness=0, takefocus=False
+        )
         self.gutter.grid(row=0, column=0, sticky="ns")
         self.text = tk.Text(
-            self,
+            self.body,
             height=height,
             width=30,
             wrap="none",
@@ -38,11 +42,11 @@ class AclEditor(ttk.Frame):
         self.text.grid(row=0, column=1, sticky="nsew")
         self.text.acl_normalize = True
         self.vertical = AutoScrollbar(
-            self, orient="vertical", command=self.text.yview, takefocus=False
+            self.body, orient="vertical", command=self.text.yview, takefocus=False
         )
         self.vertical.grid(row=0, column=2, sticky="ns")
         self.horizontal = AutoScrollbar(
-            self, orient="horizontal", command=self.text.xview, takefocus=False
+            self.body, orient="horizontal", command=self.text.xview, takefocus=False
         )
         self.horizontal.grid(row=1, column=1, sticky="ew")
         self.text.configure(yscrollcommand=self._yscroll, xscrollcommand=self.horizontal.set)

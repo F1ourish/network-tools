@@ -274,6 +274,73 @@ def run_ui_checks(binary: Path) -> tuple[list[str], list[dict]]:
         for _ in range(tab_count):
             keys(0x09)
 
+    class GUIThreadInfo(ct.Structure):
+        _fields_ = (
+            [("cbSize", wt.DWORD), ("flags", wt.DWORD)]
+            + [
+                (name, wt.HWND)
+                for name in (
+                    "hwndActive",
+                    "hwndFocus",
+                    "hwndCapture",
+                    "hwndMenuOwner",
+                    "hwndMoveSize",
+                    "hwndCaret",
+                )
+            ]
+            + [("rcCaret", wt.RECT)]
+        )
+
+    user32.GetGUIThreadInfo.argtypes = [wt.DWORD, ct.POINTER(GUIThreadInfo)]
+    user32.GetGUIThreadInfo.restype = wt.BOOL
+    user32.GetParent.argtypes = [wt.HWND]
+    user32.GetParent.restype = wt.HWND
+    user32.SetCursorPos.argtypes = [ct.c_int, ct.c_int]
+    user32.SetCursorPos.restype = wt.BOOL
+
+    def window_bounds(window):
+        bounds = wt.RECT()
+        assert user32.GetWindowRect(window, ct.byref(bounds))
+        return bounds
+
+    def focused_field(function_key, ancestors):
+        keys(function_key)
+        info = GUIThreadInfo(cbSize=ct.sizeof(GUIThreadInfo))
+        assert user32.GetGUIThreadInfo(0, ct.byref(info)) and info.hwndFocus
+        text_window = area = info.hwndFocus
+        for _ in range(ancestors):
+            area = user32.GetParent(area)
+            assert area
+        bounds = window_bounds(area)
+        assert bounds.right - bounds.left > 300 and bounds.bottom - bounds.top > 40
+        return text_window, area
+
+    def mouse_button(down):
+        event = Input(type=0, data=InputUnion(mi=MouseInput(dwFlags=2 if down else 4)))
+        assert user32.SendInput(1, ct.byref(event), ct.sizeof(Input)) == 1
+
+    def drag_pointer(x, y, dx, dy):
+        assert user32.SetCursorPos(x, y)
+        mouse_button(True)
+        try:
+            for step in range(1, 7):
+                assert user32.SetCursorPos(x + round(dx * step / 6), y + round(dy * step / 6))
+                time.sleep(0.04)
+        finally:
+            mouse_button(False)
+        time.sleep(0.15)
+
+    def expanded_field(title, expected):
+        keys(0x11, 0x0D)
+        field_hwnd = wait_until(lambda: find_window(isolated.resolve(), title + " - Network Tools"))
+        user32.SetForegroundWindow(field_hwnd)
+        wait_until(lambda: user32.GetForegroundWindow() == field_hwnd)
+        write_clipboard("expanded field copy sentinel")
+        keys(0x11, ord("A"))
+        keys(0x11, ord("C"))
+        wait_until(lambda: (read_clipboard() or "").replace("\r\n", "\n") == expected)
+        return field_hwnd
+
     def paste(value):
         focus_control(0)
         write_clipboard(value)
@@ -751,12 +818,42 @@ def run_ui_checks(binary: Path) -> tuple[list[str], list[dict]]:
                         checks.append(
                             "Routes: LPM, equal-prefix candidates, default, no match and invalid CIDR"
                         )
+                        paste_control(1, "0.0.0.0/0 default\n10.20.30.0/24 access")
+                        focus_control(1)
+                        expanded_field("Маршруты", "0.0.0.0/0 default\n10.20.30.0/24 access")
+                        write_clipboard("0.0.0.0/0 expanded default\n10.20.30.0/24 expanded access")
+                        keys(0x11, ord("V"))
+                        keys(0x1B)
+                        user32.SetForegroundWindow(hwnd)
+                        paste("10.20.30.40")
+                        route_report = copy_tool("[LPM] 10.20.30.0/24  expanded access")
+                        focus_control(3)
+                        expanded_field("Совпадения маршрутов", route_report.replace("\r\n", "\n"))
+                        keys(ord("X"))
+                        keys(0x11, ord("A"))
+                        keys(0x11, ord("C"))
+                        assert (read_clipboard() or "").replace(
+                            "\r\n", "\n"
+                        ) == route_report.replace("\r\n", "\n")
+                        keys(0x1B)
+                        user32.SetForegroundWindow(hwnd)
+                        checks.append(
+                            "Routes expansion EXE: edits synchronize to live results; expanded output is readonly and copies the exact report"
+                        )
 
                         keys(0x11, ord("5"))
                         copy_tool(
                             "запрос и ответ разрешены", "198.51.100.20:443 -> 192.0.2.10:53000"
                         )
                         save_screenshot(hwnd, Path("smoke-results/acl-request-reply-night.png"))
+                        acl_report = copy_tool("запрос и ответ разрешены")
+                        focus_control(20)
+                        expanded_field("Заключение ACL", acl_report.replace("\r\n", "\n"))
+                        keys(0x1B)
+                        user32.SetForegroundWindow(hwnd)
+                        checks.append(
+                            "ACL conclusion EXE: local expansion shortcut opens the exact full readonly conversation report"
+                        )
                         paste_control(11, "10 deny ip any any")
                         blocked_reply = copy_tool(
                             "БЛОКИРУЕТСЯ: sequence 10, строка 1", "ACL блокируют"
@@ -1050,6 +1147,24 @@ def run_ui_checks(binary: Path) -> tuple[list[str], list[dict]]:
                         checks.append(
                             "Free IP EXE: default .33/.34 exclusions, current-page and all-address clipboard output"
                         )
+                        focus_control(4)
+                        expanded_field("Кандидаты по ARP", "\n".join(first_page))
+                        keys(0x1B)
+                        user32.SetForegroundWindow(hwnd)
+                        focus_control(3)
+                        expanded_field("ARP-список", cleaned_arp.replace("\r\n", "\n"))
+                        write_clipboard(
+                            arp_values + "Internet 192.0.2.3 0 0011.2233.4403 ARPA Vlan10\n"
+                        )
+                        keys(0x11, ord("V"))
+                        keys(0x1B)
+                        user32.SetForegroundWindow(hwnd)
+                        copy_tool("Кандидатов по ARP: 249")
+                        paste_control(3, arp_values)
+                        copy_tool("Кандидатов по ARP: 250")
+                        checks.append(
+                            "Free IP expansion EXE: readonly candidate list copies exact IPs; expanded ARP edits normalize and update the calculation"
+                        )
                         paste_control(2, ".33,.34,.50-.60,192.0.2.100-192.0.2.110")
                         copy_tool("Исключения охватывают: 24", "Кандидатов по ARP: 228")
                         paste_control(12, "3")  # Prev disabled; Next, jump entry, jump button.
@@ -1190,6 +1305,43 @@ def run_ui_checks(binary: Path) -> tuple[list[str], list[dict]]:
                         )
                         checks.append(
                             "CME layout EXE: main window maximizes with the adjustable input/result workspace and retains the current report"
+                        )
+                        config_hwnd, input_area = focused_field(0x73, 2)
+                        before = window_bounds(config_hwnd)
+                        area = window_bounds(input_area)
+                        drag_pointer((area.left + area.right) // 2, area.bottom - 4, 0, 24)
+                        after = window_bounds(config_hwnd)
+                        assert after.bottom - after.top > before.bottom - before.top + 12
+                        result_hwnd, result_area = focused_field(0x75, 3)
+                        before = window_bounds(result_hwnd)
+                        area = window_bounds(result_area)
+                        drag_pointer((area.left + area.right) // 2, area.top + 4, 0, -24)
+                        after = window_bounds(result_hwnd)
+                        assert after.bottom - after.top > before.bottom - before.top + 12
+                        area = window_bounds(result_area)
+                        drag_pointer(area.right - 4, (area.top + area.bottom) // 2, -120, 0)
+                        narrower = window_bounds(result_hwnd)
+                        assert narrower.right - narrower.left < after.right - after.left - 95
+                        area = window_bounds(input_area)
+                        before = window_bounds(config_hwnd)
+                        drag_pointer(area.right - 4, area.bottom - 4, -90, 18)
+                        after = window_bounds(config_hwnd)
+                        assert after.right - after.left < before.right - before.left - 70
+                        assert after.bottom - after.top > before.bottom - before.top + 8
+                        save_screenshot(hwnd, Path("smoke-results/fields-resized-night.png"))
+                        area = window_bounds(result_area)
+                        assert user32.SetCursorPos(area.right - 124, (area.top + area.bottom) // 2)
+                        for _ in range(2):
+                            mouse_button(True)
+                            mouse_button(False)
+                            time.sleep(0.08)
+                        wait_until(
+                            lambda: (bounds := window_bounds(result_hwnd)).right - bounds.left
+                            > narrower.right - narrower.left + 95
+                        )
+                        assert copy_tool("ephone 585: существует в конфигурации") == cme_lookup
+                        checks.append(
+                            "Field resizing EXE: native mouse drags resize CUCME input and result vertically, horizontally and diagonally; double-click restores automatic width without changing data"
                         )
                         keys(0x11, 0x0D)
                         report_hwnd = activate_cme_window("Отчёт CUCME")

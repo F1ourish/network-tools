@@ -4,31 +4,27 @@ import tkinter as tk
 from tkinter import font
 
 import ttkbootstrap as ttk
-from ttkbootstrap.widgets import ToolTip
 
 from .acl_editor import AutoScrollbar
+from .panels import ResizableArea
 
 
-def expand_button(parent, command, title):
-    button = ttk.Button(parent, text="↗", width=3, command=command, bootstyle="secondary-outline")
-    ToolTip(button, text=title, delay=500)
-    return button
-
-
-class CMEReportView(ttk.Frame):
+class CMEReportView(ResizableArea):
     def __init__(self, app, parent, *, large=False):
-        super().__init__(parent)
+        super().__init__(app, parent, height=100, vertical="top")
         self.app = app
         self.rows = ()
-        self.columnconfigure(0, weight=1)
-        self.rowconfigure(0, weight=1)
-        self.text_frame, self.text = app._text_widget(self, height=4, readonly=True)
+        self.body.columnconfigure(0, weight=1)
+        self.body.rowconfigure(0, weight=1)
+        self.text_frame, self.text = app._text_widget(
+            self.body, height=4, readonly=True, resizable=False
+        )
         self.text.configure(font="TkDefaultFont", spacing1=2, spacing3=2)
         self.text_frame.grid(row=0, column=0, sticky="nsew")
         self.heading_font = font.nametofont("TkDefaultFont").copy()
         self.heading_font.configure(weight="bold", size=11 if large else 10)
         self.text.tag_configure("heading", font=self.heading_font, spacing1=7, spacing3=3)
-        self.table_frame = ttk.Frame(self)
+        self.table_frame = ttk.Frame(self.body)
         self.table_frame.grid(row=0, column=0, sticky="nsew")
         self.table_frame.columnconfigure(0, weight=1)
         self.table_frame.rowconfigure(1, weight=1)

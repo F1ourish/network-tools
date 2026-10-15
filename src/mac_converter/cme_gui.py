@@ -21,8 +21,9 @@ from .cme import (
     parse_config,
     section_availability,
 )
-from .cme_view import CMEReportView, expand_button
+from .cme_view import CMEReportView
 from .network import InvalidNetworkInput
+from .panels import expand_button, pane_split
 
 EXAMPLE_CONFIG = """telephony-service
  max-dn 200
@@ -151,6 +152,7 @@ class CMEPanel:
         self.cme_expand_button.pack(side="right")
         self.cme_report_view = CMEReportView(self, output_panel)
         self.cme_report_view.grid(row=1, column=0, sticky="nsew")
+        pane_split(self.cme_panes, (self.cme_editor, self.cme_report_view))
         self.cme_output = self.cme_report_view.text
         self.cme_table = self.cme_report_view.table
         actions = ttk.Frame(output_panel)

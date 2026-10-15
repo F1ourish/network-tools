@@ -15,6 +15,8 @@ from .acl_objects import ObjectGroupSyntaxError, normalize_object_paste, parse_o
 from .clipboard import ClipboardUnavailable, clear_if_matches
 from .cme_gui import CMEPanel
 from .help_content import TOOL_HELP
+from .panels import ResizableArea, expand_button, grid_split
+from .text_windows import open_text_field
 from .free_ips import (
     COPY_ALL_LIMIT,
     DEFAULT_EXCLUSIONS,
@@ -665,17 +667,22 @@ class MacConverterApp(CMEPanel):
         ):
             variable.trace_add("write", self._mss_update)
 
-    def _text_widget(self, parent, *, height=8, readonly=False):
-        container = ttk.Frame(parent)
-        container.columnconfigure(0, weight=1)
-        container.rowconfigure(0, weight=1)
+    def _text_widget(self, parent, *, height=8, readonly=False, resizable=True):
+        container = (
+            ResizableArea(self, parent, height=height * 19 + 20) if resizable else ttk.Frame(parent)
+        )
+        body = container.body if resizable else container
+        body.columnconfigure(0, weight=1)
+        body.rowconfigure(0, weight=1)
         text = tk.Text(
-            container, height=height, width=50, wrap="word", font=self.fixed_font, takefocus=True
+            body, height=height, width=30, wrap="word", font=self.fixed_font, takefocus=True
         )
         text.grid(row=0, column=0, sticky="nsew")
-        scrollbar = AutoScrollbar(container, orient="vertical", command=text.yview, takefocus=False)
+        scrollbar = AutoScrollbar(body, orient="vertical", command=text.yview, takefocus=False)
         scrollbar.grid(row=0, column=1, sticky="ns")
-        text.configure(yscrollcommand=scrollbar.set)
+        horizontal = AutoScrollbar(body, orient="horizontal", command=text.xview, takefocus=False)
+        horizontal.grid(row=1, column=0, sticky="ew")
+        text.configure(yscrollcommand=scrollbar.set, xscrollcommand=horizontal.set)
         self._bind_selection(text)
         text.bind("<Tab>", self._traverse_text)
         text.bind("<Shift-Tab>", lambda event: self._traverse_text(event, backwards=True))
@@ -683,6 +690,7 @@ class MacConverterApp(CMEPanel):
         if readonly:
             text.configure(state="disabled")
         self._plain_text_widgets.append(text)
+        text.field_area = container
         return container, text
 
     @staticmethod
@@ -700,10 +708,13 @@ class MacConverterApp(CMEPanel):
         inputs.grid(row=0, column=0, sticky="ew")
         inputs.columnconfigure(0, weight=1)
         self.route_entry = self._field(inputs, "IP назначения", self.route_address)
-        ttk.Label(
-            page, text="Маршруты: один CIDR на строку; далее необязательная подпись / next-hop"
-        ).grid(row=1, column=0, sticky="w", pady=(12, 7))
+        header = ttk.Frame(page)
+        header.grid(row=1, column=0, sticky="ew", pady=(12, 7))
+        ttk.Label(header, text="Маршруты: CIDR и необязательная подпись / next-hop").pack(
+            side="left"
+        )
         container, self.routes_input = self._text_widget(page, height=5)
+        self.routes_input_area = container
         container.grid(row=2, column=0, sticky="nsew")
         self.routes_paste_button = ttk.Button(
             inputs,
@@ -717,6 +728,13 @@ class MacConverterApp(CMEPanel):
         )
         self.routes_input.edit_modified(False)
         self.routes_input.bind("<<Modified>>", self._routes_modified)
+        self.routes_input_expand_button = expand_button(
+            header, lambda: open_text_field(self, self.routes_input, "Маршруты"), takefocus=False
+        )
+        self.routes_input_expand_button.pack(side="right")
+        self.routes_input.bind(
+            "<Control-Return>", lambda _e: self.routes_input_expand_button.invoke()
+        )
         ttk.Label(page, textvariable=self.routes_error, bootstyle="danger", wraplength=780).grid(
             row=3, column=0, sticky="ew", pady=(8, 4)
         )
@@ -728,8 +746,25 @@ class MacConverterApp(CMEPanel):
             actions, text="Копировать", command=self.copy_routes, bootstyle="primary"
         )
         self.routes_copy_button.grid(row=0, column=1)
+        self.routes_expand_button = expand_button(
+            actions,
+            lambda: open_text_field(self, self.routes_output, "Совпадения маршрутов"),
+            takefocus=False,
+        )
+        self.routes_expand_button.grid(row=0, column=2, padx=(6, 0))
         container, self.routes_output = self._text_widget(page, height=5, readonly=True)
+        self.routes_output_area = container
+        container.vertical_side = "top"
         container.grid(row=5, column=0, sticky="nsew")
+        self.routes_output.bind("<Control-Return>", lambda _e: self.routes_expand_button.invoke())
+        grid_split(
+            page,
+            self.routes_input_area,
+            container,
+            axis="y",
+            slots=(2, 5),
+            areas=(self.routes_input_area, container),
+        )
         ttk.Label(
             page,
             text="Анализируется введённый список. Выбор VRF, PBR и разрешение next-hop не моделируются.",
@@ -739,6 +774,8 @@ class MacConverterApp(CMEPanel):
         self.route_address.trace_add("write", self._routes_update)
 
     def _build_acl(self, page):
+        page.rowconfigure(3, weight=1)
+        page.rowconfigure(6, weight=1)
         self.acl_objects_summary = tk.StringVar(self.root, value="IP-группы: не заданы")
         self.acl_objects_error = tk.StringVar(self.root)
         self.acl_object_name = tk.StringVar(self.root)
@@ -804,21 +841,28 @@ class MacConverterApp(CMEPanel):
         )
         self.acl_interface_entry.pack(side="left")
         lists = ttk.Frame(page)
-        lists.grid(row=3, column=0, sticky="ew")
+        lists.grid(row=3, column=0, sticky="nsew")
+        lists.rowconfigure(0, weight=1)
         self.acl_inputs = []
         self.acl_editors = []
         self.acl_expand_buttons = []
         self.acl_absent_buttons = []
+        self.acl_input_panels = []
         for column in range(2):
             lists.columnconfigure(column, weight=1, uniform="acllists")
             frame = ttk.Frame(lists)
             frame.grid(row=0, column=column, sticky="nsew", padx=(0, 8) if column == 0 else (8, 0))
             frame.columnconfigure(0, weight=1)
+            frame.rowconfigure(1, weight=1)
+            self.acl_input_panels.append(frame)
             ttk.Label(frame, textvariable=self.acl_direction_labels[column], wraplength=340).grid(
                 row=0, column=0, sticky="w"
             )
             editor = AclEditor(
-                self, frame, changed=lambda e, index=column: self._acl_editor_changed(e, index)
+                self,
+                frame,
+                height=3,
+                changed=lambda e, index=column: self._acl_editor_changed(e, index),
             )
             editor.grid(row=1, column=0, sticky="nsew", pady=(6, 0))
             widget = editor.text
@@ -832,9 +876,7 @@ class MacConverterApp(CMEPanel):
             )
             button.pack(side="left")
             widget.paste_button = button
-            expand = ttk.Button(
-                buttons, text="Развернуть", command=lambda index=column: self.open_acl_editor(index)
-            )
+            expand = expand_button(buttons, lambda index=column: self.open_acl_editor(index))
             expand.pack(side="left", padx=(6, 0))
             self.acl_expand_buttons.append(expand)
             absent = ttk.Checkbutton(
@@ -845,6 +887,8 @@ class MacConverterApp(CMEPanel):
             widget.bind("<Control-Return>", lambda _e, index=column: self.open_acl_editor(index))
             self.acl_inputs.append(widget)
         self.acl_forward_input, self.acl_reverse_input = self.acl_inputs
+        self.acl_editors[1].horizontal_side = "left"
+        grid_split(lists, *self.acl_input_panels, axis="x", slots=(0, 1), areas=self.acl_editors)
         actions = ttk.Frame(page)
         actions.grid(row=4, column=0, sticky="ew", pady=(10, 4))
         self.acl_example_button = ttk.Button(
@@ -862,14 +906,26 @@ class MacConverterApp(CMEPanel):
             actions, text="Копировать заключение", command=self.copy_acl
         )
         self.acl_copy_button.pack(side="right")
+        self.acl_output_expand_button = expand_button(
+            actions,
+            lambda: open_text_field(self, self.acl_output, "Заключение ACL"),
+            takefocus=False,
+        )
+        self.acl_output_expand_button.pack(side="right", padx=(0, 6))
         ttk.Label(actions, textvariable=self.acl_objects_summary, bootstyle="secondary").pack(
             side="left"
         )
         ttk.Label(page, textvariable=self.acl_flow_error, wraplength=780, bootstyle="danger").grid(
             row=5, column=0, sticky="ew", pady=(4, 4)
         )
-        container, self.acl_output = self._text_widget(page, height=9, readonly=True)
-        container.grid(row=6, column=0, sticky="ew")
+        container, self.acl_output = self._text_widget(page, height=4, readonly=True)
+        self.acl_output_area = container
+        self.acl_output.bind("<Control-Return>", lambda _e: self.acl_output_expand_button.invoke())
+        container.vertical_side = "top"
+        container.grid(row=6, column=0, sticky="nsew")
+        grid_split(
+            page, lists, container, axis="y", slots=(3, 6), areas=(*self.acl_editors, container)
+        )
         ttk.Label(
             page,
             text="«Пример HTTPS» загружает тестовые адреса и правила. Первый permit/deny определяет результат; без совпадения действует неявный deny. Неизвестный порт может требовать уточнения.",
@@ -1269,6 +1325,7 @@ class MacConverterApp(CMEPanel):
             self._copy(self.acl_output.get("1.0", "end-1c"))
 
     def _build_free_ips(self, page):
+        page.rowconfigure(5, weight=1)
         self.free_ip_network = tk.StringVar(self.root, value="192.168.1.0")
         self.free_ip_mask = tk.StringVar(self.root, value="/24")
         self.free_ip_exclusions = tk.StringVar(self.root, value=DEFAULT_EXCLUSIONS)
@@ -1311,15 +1368,47 @@ class MacConverterApp(CMEPanel):
         lists.rowconfigure(1, weight=1)
         for column in range(2):
             lists.columnconfigure(column, weight=1, uniform="free_ip_lists")
-        ttk.Label(lists, text="ARP-список").grid(row=0, column=0, sticky="w", pady=(0, 6))
-        ttk.Label(lists, text="Кандидаты по ARP").grid(row=0, column=1, sticky="w", pady=(0, 6))
+        headers = []
+        for column, title in enumerate(("ARP-список", "Кандидаты по ARP")):
+            header = ttk.Frame(lists)
+            header.grid(
+                row=0, column=column, sticky="ew", pady=(0, 6), padx=(0, 10) if column == 0 else 0
+            )
+            ttk.Label(header, text=title).pack(side="left")
+            headers.append(header)
         self.free_ip_arp_editor = AclEditor(self, lists, height=6, changed=self._free_ip_changed)
         self.free_ip_arp_editor.grid(row=1, column=0, sticky="nsew", padx=(0, 10))
         self.free_ip_arp_input = self.free_ip_arp_editor.text
         self.free_ip_arp_input.paste_normalizer = normalize_arp_paste
         container, self.free_ip_output = self._text_widget(lists, height=6, readonly=True)
         self.free_ip_output.configure(wrap="none")
+        self.free_ip_output_area = container
+        container.horizontal_side = "left"
         container.grid(row=1, column=1, sticky="nsew")
+        grid_split(
+            lists,
+            self.free_ip_arp_editor,
+            container,
+            axis="x",
+            slots=(0, 1),
+            areas=(self.free_ip_arp_editor, container),
+        )
+        self.free_ip_input_expand_button = expand_button(
+            headers[0],
+            lambda: open_text_field(self, self.free_ip_arp_input, "ARP-список", numbered=True),
+            takefocus=False,
+        )
+        self.free_ip_output_expand_button = expand_button(
+            headers[1],
+            lambda: open_text_field(self, self.free_ip_output, "Кандидаты по ARP"),
+            takefocus=False,
+        )
+        for button, widget in (
+            (self.free_ip_input_expand_button, self.free_ip_arp_input),
+            (self.free_ip_output_expand_button, self.free_ip_output),
+        ):
+            button.pack(side="right")
+            widget.bind("<Control-Return>", lambda _e, b=button: b.invoke())
         actions = ttk.Frame(lists)
         actions.grid(row=2, column=0, sticky="w", pady=(8, 0))
         self.free_ip_paste_button = ttk.Button(
@@ -1847,6 +1936,8 @@ class MacConverterApp(CMEPanel):
         self.root.configure(background=colors.bg)
         for canvas in self._canvases:
             canvas.configure(background=colors.bg)
+        for area in self._resize_areas:
+            area.apply_theme()
         for text in self._plain_text_widgets:
             if text.winfo_exists():
                 text.configure(
