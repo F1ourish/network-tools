@@ -326,14 +326,45 @@ def run_ui_checks(binary: Path) -> tuple[list[str], list[dict]]:
 
     def drag_pointer(x, y, dx, dy):
         assert user32.SetCursorPos(x, y)
+        time.sleep(0.08)
         mouse_button(True)
         try:
+            time.sleep(0.08)
             for step in range(1, 7):
                 assert user32.SetCursorPos(x + round(dx * step / 6), y + round(dy * step / 6))
                 time.sleep(0.04)
         finally:
             mouse_button(False)
         time.sleep(0.15)
+
+    def reset_field_width(area, body, narrowed_width):
+        def restored():
+            bounds = window_bounds(body)
+            return bounds.right - bounds.left > narrowed_width + 95
+
+        for attempt in range(3):
+            grips = []
+            for child in child_windows(area):
+                if user32.GetParent(child) != area:
+                    continue
+                bounds = window_bounds(child)
+                if bounds.right - bounds.left == 9 and bounds.bottom - bounds.top > 35:
+                    grips.append(bounds)
+            assert len(grips) == 1, "Expected one actual vertical field grip"
+            grip = grips[0]
+            assert user32.SetCursorPos((grip.left + grip.right) // 2, (grip.top + grip.bottom) // 2)
+            time.sleep(0.08)
+            for _ in range(2):
+                mouse_button(True)
+                time.sleep(0.06)
+                mouse_button(False)
+                time.sleep(0.09)
+            try:
+                wait_until(restored, timeout=2)
+                return
+            except AssertionError:
+                if attempt == 2:
+                    raise
 
     def expanded_field(title, expected):
         keys(0x11, 0x0D)
@@ -1346,16 +1377,7 @@ def run_ui_checks(binary: Path) -> tuple[list[str], list[dict]]:
                         assert after.right - after.left < before.right - before.left - 70
                         assert after.bottom - after.top > before.bottom - before.top + 8
                         save_screenshot(hwnd, Path("smoke-results/fields-resized-night.png"))
-                        area = window_bounds(result_area)
-                        assert user32.SetCursorPos(area.right - 124, (area.top + area.bottom) // 2)
-                        for _ in range(2):
-                            mouse_button(True)
-                            mouse_button(False)
-                            time.sleep(0.08)
-                        wait_until(
-                            lambda: (bounds := window_bounds(result_hwnd)).right - bounds.left
-                            > narrower.right - narrower.left + 95
-                        )
+                        reset_field_width(result_area, result_hwnd, narrower.right - narrower.left)
                         assert copy_tool("ephone 585: существует в конфигурации") == cme_lookup
                         checks.append(
                             "Field resizing EXE: native mouse drags resize CUCME input and result vertically, horizontally and diagonally; double-click restores automatic width without changing data"
