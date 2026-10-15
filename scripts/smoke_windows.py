@@ -1134,7 +1134,8 @@ def run_ui_checks(binary: Path) -> tuple[list[str], list[dict]]:
                         keys(0x20)
                         dn_values = wait_until(
                             lambda: value
-                            if (value := read_clipboard()) and value.startswith("1\r\n2")
+                            if (value := read_clipboard())
+                            and value.replace("\r\n", "\n").startswith("1\n2")
                             else None
                         ).splitlines()
                         assert (
@@ -1160,14 +1161,20 @@ def run_ui_checks(binary: Path) -> tuple[list[str], list[dict]]:
                         copy_tool("Свободные ephone ID: 2", "max-ephones ограничивает количество")
                         focus_control(4)
                         keys(0x20)
-                        wait_until(lambda: read_clipboard().replace("\r\n", "\n") == "584\n586")
+                        wait_until(
+                            lambda: (value := read_clipboard()) is not None
+                            and value.replace("\r\n", "\n") == "584\n586"
+                        )
                         select_cme_free_kind(2)
                         paste("31084")
                         paste_control(1, "31086")
                         copy_tool("Свободные телефонные номера: 2")
                         focus_control(4)
                         keys(0x20)
-                        wait_until(lambda: read_clipboard().replace("\r\n", "\n") == "31084\n31086")
+                        wait_until(
+                            lambda: (value := read_clipboard()) is not None
+                            and value.replace("\r\n", "\n") == "31084\n31086"
+                        )
                         checks.append(
                             "CME EXE: ephone ID range is independent of max-ephones count; free telephone range excludes configured primary numbers"
                         )
@@ -1185,7 +1192,10 @@ def run_ui_checks(binary: Path) -> tuple[list[str], list[dict]]:
                             keys(0x10, 0x09)
                         keys(0x11, ord("A"))
                         keys(0x11, ord("C"))
-                        wait_until(lambda: read_clipboard().replace("\r\n", "\n") == cme_values)
+                        wait_until(
+                            lambda: (value := read_clipboard()) is not None
+                            and value.replace("\r\n", "\n") == cme_values
+                        )
                         focus_control(0)
                         for _ in range(5):
                             keys(0x10, 0x09)  # Config Text, paste, clear.
