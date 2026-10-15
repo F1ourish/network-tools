@@ -199,6 +199,19 @@ def test_search_keyboard_traversal_can_reach_configuration_and_actions(app):
     assert app.cme_free_mode_button.tk_focusPrev() == app.cme_search_mode_button
     assert app.cme_search_mode_button.tk_focusPrev() == app.cme_config_input
     assert app.cme_search_selector.tk_focusNext() == app.cme_output
+    app.root.geometry("820x610")
+    app.root.update()
+    button = app.cme_expand_button
+    assert button.winfo_ismapped()
+    assert button.winfo_rootx() >= app.root.winfo_rootx()
+    assert (
+        button.winfo_rootx() + button.winfo_width()
+        <= app.root.winfo_rootx() + app.root.winfo_width()
+    )
+    assert (
+        button.winfo_rooty() + button.winfo_height()
+        <= app.root.winfo_rooty() + app.root.winfo_height()
+    )
 
 
 def expanded(app):

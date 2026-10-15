@@ -64,6 +64,10 @@ class CMEPanel:
         header = ttk.Frame(page)
         header.grid(row=0, column=0, sticky="ew", pady=(0, 6))
         ttk.Label(header, text="Конфигурация CUCME").pack(side="left")
+        self.cme_expand_button = ttk.Button(
+            header, text="Развернуть отчёт", command=self.open_cme_report
+        )
+        self.cme_expand_button.pack(side="left", padx=(12, 0))
         self.cme_example_button = ttk.Button(header, text="Пример", command=self.cme_example)
         self.cme_example_button.pack(side="right")
         self.cme_clear_button = ttk.Button(
@@ -101,7 +105,7 @@ class CMEPanel:
         for column in range(2):
             self.cme_search_frame.columnconfigure(column, weight=1)
         self.cme_query_entry = self._field(
-            self.cme_search_frame, "Телефон, номер ephone/DN или имя", self.cme_query
+            self.cme_search_frame, "Телефон, ephone/DN или имя", self.cme_query
         )
         self.cme_search_selector = self._field(
             self.cme_search_frame, "Искать по", self.cme_search_kind, 1, values=tuple(SEARCH_KINDS)
@@ -121,10 +125,10 @@ class CMEPanel:
         )
         self.cme_free_frame.grid_remove()
         container, self.cme_output = self._text_widget(page, height=7, readonly=True)
-        self.cme_output.configure(font="TkDefaultFont", spacing1=2, spacing3=2)
-        container.grid(row=7, column=0, sticky="nsew")
+        self.cme_output.configure(font="TkDefaultFont")
+        container.grid(row=6, column=0, sticky="nsew")
         actions = ttk.Frame(page)
-        actions.grid(row=8, column=0, sticky="ew", pady=(7, 0))
+        actions.grid(row=7, column=0, sticky="ew", pady=(7, 0))
         self.cme_copy_button = ttk.Button(
             actions, text="Копировать отчёт", command=self.copy_cme_report
         )
@@ -148,14 +152,7 @@ class CMEPanel:
             text="Конфиг остаётся до явной очистки или закрытия. Данные не записываются на диск. Поиск по снимку, без проверки регистрации.",
             wraplength=780,
             bootstyle="secondary",
-        ).grid(row=9, column=0, sticky="ew", pady=(7, 0))
-        report_header = ttk.Frame(page)
-        report_header.grid(row=6, column=0, sticky="ew", pady=(0, 5))
-        ttk.Label(report_header, text="Отчёт").pack(side="left")
-        self.cme_expand_button = ttk.Button(
-            report_header, text="Развернуть отчёт", command=self.open_cme_report
-        )
-        self.cme_expand_button.pack(side="right")
+        ).grid(row=8, column=0, sticky="ew", pady=(7, 0))
         for widget in (
             self.cme_config_input,
             self.cme_query_entry,
