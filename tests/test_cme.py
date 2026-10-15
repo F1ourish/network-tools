@@ -96,20 +96,20 @@ def test_all_requested_search_fields_and_partial_casefold_names(query, kind, exp
 def test_reports_show_distinct_description_number_label_name_and_hardware():
     report, pages = lookup_report(parse_config(CONFIG), "585", "ephone")
     for value in (
-        "ephone 585: ЗАНЯТ",
+        "ephone 585: существует в конфигурации",
         "Example Alex Office",
         "button 1:85",
         "ephone-dn 85",
-        "description DN (телефон): 33085",
-        "number: 31085",
-        "secondary: 32085",
-        "name: Example Alex; label: Example A.",
-        "type: 7942",
+        "Описание (description): 33085",
+        "Телефонный номер (number): 31085",
+        "Дополнительный номер (secondary): 32085",
+        "Имя (name): Example Alex; подпись (label): Example A.",
+        "Модель (type): 7942",
         "MAC: 0011.2233.4455",
     ):
         assert value in report
     assert pages == 1
-    assert "number и description различаются" in report
+    assert "номер в описании отличается от назначенного" in report
     empty, _ = lookup_report(parse_config(CONFIG), "no match")
     assert "Совпадений нет" in empty and "фрагменте" in empty
 
@@ -129,8 +129,8 @@ def test_empty_objects_and_dangling_button_references_remain_reserved():
     assert free_numbers(config, "dn", "1", "5").all_numbers() == ("1", "3", "5")
     assert free_numbers(config, "ephone", "1", "5").all_numbers() == ("1", "2", "4")
     report, _ = lookup_report(config, "4", "dn")
-    assert "секция не предоставлена, ID не свободен" in report
-    assert any("нет number" in warning for warning in config.warnings)
+    assert "сама секция отсутствует во вставленном конфиге" in report
+    assert any("Телефонный номер (number) не задан" in warning for warning in config.warnings)
 
 
 @pytest.mark.parametrize("separator", [":", "b", "c", "f", "m", "o", "s", "w"])
@@ -252,7 +252,7 @@ def test_plus_prefixed_numbers_are_conservatively_reserved_in_decimal_range():
 
 @pytest.mark.parametrize("query", ["0", "abc", "1000001", "١"])
 def test_invalid_search_id_is_an_input_error_not_config_line_zero(query):
-    with pytest.raises(InvalidNetworkInput, match="Для поиска ID") as error:
+    with pytest.raises(InvalidNetworkInput, match="Для поиска номера секции") as error:
         find_links(parse_config("ephone 1"), query, "ephone")
     assert "строка" not in str(error.value)
 
@@ -334,7 +334,7 @@ def test_search_and_free_pagination_and_invalid_pages():
             lookup_report(config, "example", "name", page)
     free = free_numbers(config, "dn", "1", "25")
     assert free.total == 0 and free.page() == ((), 1)
-    assert "Свободные ephone-dn ID: 0" in free_report(config, free)[0]
+    assert "Свободные номера ephone-dn: 0" in free_report(config, free)[0]
 
 
 @pytest.mark.parametrize("seed", range(5))
@@ -351,3 +351,60 @@ def test_free_intervals_match_independent_full_enumeration(seed):
         )
         == expected
     )
+
+
+def test_free_description_is_visible_but_existing_section_remains_reserved():
+    config = parse_config("ephone 38\n description FREE\n!\n")
+    (warning,) = config.warnings
+    assert "ephone 38 существует в конфигурации (строка 1)" in warning
+    assert "Описание (description): FREE" in warning
+    assert "MAC-адрес (mac-address), модель телефона (type)" in warning
+    assert "Номер секции ephone 38 исключён из списка свободных" in warning
+    report, _ = lookup_report(config, "38", "ephone")
+    assert "Описание аппарата (description): FREE" in report
+    assert "button: привязки к ephone-dn не указаны" in report
+    assert "ID" not in report and "ЗАНЯТ" not in report
+    assert free_numbers(config, "ephone", "37", "39").all_numbers() == ("37", "39")
+
+
+@pytest.mark.parametrize(
+    "fields,missing,present",
+    [
+        (" type 7942", "MAC-адрес (mac-address)", "модель телефона (type)"),
+        (" mac-address 0011.2233.4455", "модель телефона (type)", "MAC-адрес (mac-address)"),
+    ],
+)
+def test_hardware_warning_names_only_the_fields_that_are_missing(fields, missing, present):
+    (warning,) = parse_config(f"ephone 7\n description Spare desk\n{fields}\n!\n").warnings
+    assert missing in warning and present not in warning
+    assert "Описание (description): Spare desk" in warning
+
+
+def test_number_description_note_gives_actual_values_and_explains_the_fields():
+    config = parse_config("ephone-dn 202\n number 31202\n description 31201\n!\n")
+    (warning,) = config.warnings
+    assert "ephone-dn 202 (строка 1)" in warning
+    assert "Телефонный номер (number): 31202" in warning
+    assert "Описание (description): 31201" in warning
+    assert "number задаёт телефонный номер, description - произвольное описание" in warning
+    assert "не означает ошибку" in warning
+    report, _ = lookup_report(config, "202", "dn")
+    assert "Телефонный номер (number): 31202" in report
+    assert "Описание (description): 31201" in report
+    assert "показаны оба поля" not in report
+
+
+def test_notes_explicitly_cover_whole_config_and_are_separate_numbered_paragraphs():
+    config = parse_config(
+        "ephone 38\n description FREE\n!\nephone-dn 202\n number 31202\n description 31201\n!"
+    )
+    report, _ = lookup_report(config, "202", "dn")
+    assert "Замечания по всей конфигурации: 2.\n\n1. ephone 38" in report
+    assert "\n\n2. ephone-dn 202" in report
+    assert "первые 20" not in report
+    assert "\n   Описание (description): FREE" in report
+    many = parse_config("\n!\n".join(f"ephone {i}" for i in range(1, 23)))
+    limited, _ = free_report(many, free_numbers(many, "ephone", "1", "25"))
+    assert "Замечания по всей конфигурации: 22" in limited
+    assert "Показаны первые 20 из 22" in limited
+    assert "\n\n20. ephone 20" in limited and "\n\n21." not in limited

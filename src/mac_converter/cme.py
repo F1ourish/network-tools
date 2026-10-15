@@ -15,12 +15,12 @@ MAX_LINKS = 100000
 COPY_LIMIT = 10000
 SEARCH_KINDS = {
     "Любое поле": "all",
-    "ephone ID": "ephone",
-    "ephone-dn ID": "dn",
+    "Номер ephone": "ephone",
+    "Номер ephone-dn": "dn",
     "Телефон": "number",
     "Имя / label": "name",
 }
-FREE_KINDS = {"ephone-dn ID": "dn", "ephone ID": "ephone", "Телефонные номера": "number"}
+FREE_KINDS = {"Номера ephone-dn": "dn", "Номера ephone": "ephone", "Телефонные номера": "number"}
 _HEADER = re.compile(r"(ephone-dn|ephone)\s+([0-9]+)(?:\s+(dual-line|octo-line))?", re.I)
 _PROMPT = re.compile(r"^\S+(?:\([^)]*\))?[>#]\s*")
 _BUTTON = re.compile(r"([0-9]+)([:bcfmoswx])([0-9]+(?:,[0-9]+)*)", re.I)
@@ -36,7 +36,8 @@ class CMESyntaxError(InvalidNetworkInput):
 def _tag(value: str, line: int) -> int:
     if not re.fullmatch(r"[0-9]{1,7}", value) or not 1 <= int(value) <= MAX_TAG:
         raise CMESyntaxError(
-            line, "ID должен быть целым от 1 до 1000000 (лимит обработки, не ёмкость CME)."
+            line,
+            "номер секции или кнопки должен быть целым от 1 до 1000000 (лимит обработки, не ёмкость CME).",
         )
     return int(value)
 
@@ -108,7 +109,9 @@ def _buttons(value: str, line: int) -> tuple[Button, ...]:
         position, mode, targets = match.groups()
         ids = tuple(_tag(item, line) for item in targets.split(","))
         if len(ids) > 25 or (len(ids) > 1 and mode.lower() not in ("o", "c")):
-            raise CMESyntaxError(line, "список DN допустим только для o/c, не более 25 ID.")
+            raise CMESyntaxError(
+                line, "список номеров ephone-dn допустим только для o/c, не более 25."
+            )
         result.append(Button(_tag(position, line), mode.lower(), tuple(dict.fromkeys(ids)), line))
     if not result:
         raise CMESyntaxError(line, "после button требуется привязка кнопки.")
@@ -294,27 +297,49 @@ def parse_config(value: str) -> CMEConfig:
                 if len(links) > MAX_LINKS:
                     raise InvalidNetworkInput("CUCME: более 100000 связей button/DN.")
         if not phone.mac or not phone.model:
-            warnings.append(f"ephone {phone.tag}: MAC или type не указаны; ID занят.")
+            missing = []
+            if not phone.mac:
+                missing.append("MAC-адрес (mac-address)")
+            if not phone.model:
+                missing.append("модель телефона (type)")
+            warnings.append(
+                f"ephone {phone.tag} существует в конфигурации (строка {phone.line}).\n"
+                f"Описание (description): {phone.description or 'не указано'}.\n"
+                f"Не заполнены поля: {', '.join(missing)}.\n"
+                f"Номер секции ephone {phone.tag} исключён из списка свободных."
+            )
     for dn in sorted(dns.values(), key=lambda item: item.tag):
         if dn.tag not in referenced:
             links.append(Link(None, dn.tag))
         if not dn.number:
-            warnings.append(f"ephone-dn {dn.tag}: нет number; секция существует, ID занят.")
+            warnings.append(
+                f"ephone-dn {dn.tag} существует в конфигурации (строка {dn.line}).\n"
+                f"Описание (description): {dn.description or 'не указано'}.\n"
+                "Телефонный номер (number) не задан.\n"
+                f"Номер секции ephone-dn {dn.tag} исключён из списка свободных."
+            )
         tokens = _PHONE_TOKEN.findall(dn.description)
         if dn.number and tokens and dn.number not in tokens:
             warnings.append(
-                f"ephone-dn {dn.tag}: number и description различаются; показаны оба поля."
+                f"ephone-dn {dn.tag} (строка {dn.line}): номер в описании отличается от назначенного.\n"
+                f"Телефонный номер (number): {dn.number}.\n"
+                f"Описание (description): {dn.description}.\n"
+                "number задаёт телефонный номер, description - произвольное описание. "
+                "Различие само по себе не означает ошибку конфигурации."
             )
     for tag in sorted(referenced - dns.keys()):
         warnings.append(
-            f"ephone-dn {tag} упомянут в button, но секция не предоставлена; ID исключён из свободных."
+            f"ephone-dn {tag}: есть ссылка из button, но сама секция отсутствует во вставленном конфиге.\n"
+            f"Номер секции ephone-dn {tag} исключён из списка свободных до проверки полного конфига."
         )
     if has_sip or has_templates:
         warnings.append(
             "SIP voice register/шаблоны не разворачиваются; показаны прямые SCCP-связи. Соответствующие свободные ресурсы блокируются."
         )
     if max_dn is not None and any(tag > max_dn for tag in dns.keys() | referenced):
-        warnings.append("ID DN превышает max-dn: проверить полноту и актуальность конфига.")
+        warnings.append(
+            "Номер секции ephone-dn превышает max-dn: проверить полноту и актуальность конфига."
+        )
     return CMEConfig(
         dns,
         phones,
@@ -345,7 +370,7 @@ def find_links(config: CMEConfig, query: str, kind: str = "all") -> tuple[Link, 
     numeric = int(text) if re.fullmatch(r"[0-9]{1,16}", text) else None
     if kind in ("ephone", "dn"):
         if numeric is None or not 1 <= numeric <= MAX_TAG:
-            raise InvalidNetworkInput("Для поиска ID ввести целое от 1 до 1000000.")
+            raise InvalidNetworkInput("Для поиска номера секции ввести целое от 1 до 1000000.")
     result = []
     for link in config.links:
         phone, dn = config.phones.get(link.phone), config.dns.get(link.dn)
@@ -375,7 +400,13 @@ def find_links(config: CMEConfig, query: str, kind: str = "all") -> tuple[Link, 
 def _notes(config: CMEConfig) -> list[str]:
     if not config.warnings:
         return []
-    return ["", f"Замечания: {len(config.warnings)} (первые 20)", *config.warnings[:20]]
+    lines = ["", f"Замечания по всей конфигурации: {len(config.warnings)}."]
+    if len(config.warnings) > 20:
+        lines.append(f"Показаны первые 20 из {len(config.warnings)}.")
+    for index, warning in enumerate(config.warnings[:20], 1):
+        detail = warning.replace("\n", "\n   ")
+        lines += ["", f"{index}. {detail}"]
+    return lines
 
 
 def lookup_report(
@@ -395,8 +426,9 @@ def lookup_report(
         lines.append("")
         if phone:
             lines += [
-                f"ephone {phone.tag}: ЗАНЯТ - {phone.description or 'без description'}",
-                f"type: {phone.model or '-'}; MAC: {phone.mac or '-'}; строка {phone.line}",
+                f"ephone {phone.tag}: существует в конфигурации (строка {phone.line})",
+                f"Описание аппарата (description): {phone.description or 'не указано'}",
+                f"Модель (type): {phone.model or 'не указана'}; MAC: {phone.mac or 'не указан'}",
             ]
         else:
             lines.append("ephone: привязка в предоставленном конфиге отсутствует.")
@@ -406,17 +438,18 @@ def lookup_report(
                 + (" (x: ссылка на overlay-кнопку)" if link.button.mode == "x" else "")
             )
         elif phone:
-            lines.append("button: не указан; ephone ID остаётся занятым.")
+            lines.append("button: привязки к ephone-dn не указаны.")
         if dn:
             lines += [
-                f"ephone-dn {dn.tag}: ЗАНЯТ; строка {dn.line}; {dn.mode or 'single-line'}",
-                f"description DN (телефон): {dn.description or '-'}",
-                f"number: {dn.number or '-'}; secondary: {dn.secondary or '-'}",
-                f"name: {dn.name or '-'}; label: {dn.label or '-'}",
+                f"ephone-dn {dn.tag}: существует в конфигурации (строка {dn.line}; {dn.mode or 'single-line'})",
+                f"Телефонный номер (number): {dn.number or 'не задан'}",
+                f"Дополнительный номер (secondary): {dn.secondary or 'не задан'}",
+                f"Описание (description): {dn.description or 'не указано'}",
+                f"Имя (name): {dn.name or 'не указано'}; подпись (label): {dn.label or 'не указана'}",
             ]
         elif link.dn is not None:
             lines.append(
-                f"ephone-dn {link.dn}: упомянут в button; секция не предоставлена, ID не свободен."
+                f"ephone-dn {link.dn}: есть ссылка из button, но сама секция отсутствует во вставленном конфиге."
             )
     lines += _notes(config)
     lines += [
@@ -481,7 +514,9 @@ def free_numbers(config: CMEConfig, kind: str, first: str, last: str) -> FreeNum
     width = len(start) if padded else 0
     if kind in ("dn", "ephone"):
         if low < 1 or high > MAX_TAG:
-            raise InvalidNetworkInput("Диапазон ID должен быть от 1 до 1000000 (лимит обработки).")
+            raise InvalidNetworkInput(
+                "Диапазон номеров секций должен быть от 1 до 1000000 (лимит обработки)."
+            )
         maximum = config.max_dn if kind == "dn" else None
         if maximum is not None and high > maximum:
             raise InvalidNetworkInput(
@@ -525,15 +560,15 @@ def free_numbers(config: CMEConfig, kind: str, first: str, last: str) -> FreeNum
 def free_report(config: CMEConfig, result: FreeNumbers, page: int = 0) -> tuple[str, int]:
     values, pages = result.page(page)
     label = next(label for label, kind in FREE_KINDS.items() if kind == result.kind)
-    if result.kind == "number":
-        label = label.lower()
+    label = label[0].lower() + label[1:]
     first, last = str(result.first).zfill(result.width), str(result.last).zfill(result.width)
     lines = [
         f"Свободные {label}: {result.total}. Диапазон {first}-{last}.",
         f"Страница {page + 1} / {pages}.",
-        "Нет секции/резерва во вставленном конфиге; отсутствующий button не освобождает созданный DN.",
-        "Телефоны: учитываются number, secondary и цифровые значения description DN.",
-        "max-ephones ограничивает количество аппаратов; границы ephone ID проверяются по платформе.",
+        "Номера секций ephone/ephone-dn и телефонные номера - разные ресурсы.",
+        "Созданные секции, включая пустые или с description FREE, исключены из свободных номеров секций.",
+        "Телефоны: учитываются назначенный number, дополнительный secondary и числа из описания description DN.",
+        "max-ephones ограничивает количество аппаратов; допустимые номера секций ephone зависят от платформы.",
         "",
         *values,
         *_notes(config),

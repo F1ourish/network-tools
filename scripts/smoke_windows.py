@@ -1085,8 +1085,9 @@ def run_ui_checks(binary: Path) -> tuple[list[str], list[dict]]:
                         assert_invalid_copy()
                         from mac_converter.cme_gui import EXAMPLE_CONFIG
 
-                        cme_values = EXAMPLE_CONFIG.replace(
-                            "description 31085", "description 32085"
+                        cme_values = (
+                            EXAMPLE_CONFIG.replace("description 31085", "description 32085")
+                            + "ephone 38\n description FREE\n!\n"
                         )
 
                         def paste_cme_config(value):
@@ -1112,27 +1113,107 @@ def run_ui_checks(binary: Path) -> tuple[list[str], list[dict]]:
 
                         paste_cme_config(cme_values)
                         paste("585")
-                        copy_tool(
-                            "ephone 585: ЗАНЯТ",
+                        cme_lookup = copy_tool(
+                            "ephone 585: существует в конфигурации",
                             "button 1:85 -> ephone-dn 85",
-                            "description DN (телефон): 32085",
-                            "number: 31085",
-                            "type: 7942",
+                            "Описание (description): 32085",
+                            "Телефонный номер (number): 31085",
+                            "Модель (type): 7942",
                             "MAC: 0011.2233.4455",
+                            "ephone 38 существует в конфигурации",
+                            "Описание (description): FREE",
+                            "number задаёт телефонный номер, description - произвольное описание",
+                        )
+                        assert (
+                            "ID занят" not in cme_lookup and "показаны оба поля" not in cme_lookup
                         )
                         save_screenshot(hwnd, Path("smoke-results/cme-lookup-night.png"))
                         checks.append(
                             "CME EXE: full configuration paste maps ephone 585 -> button 1:85 -> DN 85; description, number, type and MAC remain distinct"
                         )
-                        select_cme_search_kind(2, "ephone-dn ID")
+                        keys(0x11, 0x0D)  # Ctrl+Enter from the query opens the report.
+                        report_hwnd = wait_until(
+                            lambda: find_window(isolated.resolve(), "Отчёт CUCME - Network Tools")
+                        )
+                        user32.SetForegroundWindow(report_hwnd)
+                        wait_until(lambda: user32.GetForegroundWindow() == report_hwnd)
+                        assert user32.IsZoomed(report_hwnd), "CUCME report must open maximized"
+                        assert copy_tool("ephone 585: существует в конфигурации") == cme_lookup
+                        write_clipboard("report must remain read only")
+                        keys(0x11, ord("V"))
+                        assert copy_tool("ephone 585: существует в конфигурации") == cme_lookup
+                        keys(0x11, 0x24)  # Start of the report.
+                        save_screenshot(report_hwnd, Path("smoke-results/cme-report-night.png"))
+                        keys(0x11, 0x23)  # End of the report and its detailed notes.
+                        save_screenshot(
+                            report_hwnd, Path("smoke-results/cme-report-notes-night.png")
+                        )
+                        checks.append(
+                            "CME report EXE: Ctrl+Enter opens a maximized readonly window; exact report copy includes FREE description, actual number/description values and field meanings"
+                        )
+                        user32.SetForegroundWindow(hwnd)
+                        wait_until(lambda: user32.GetForegroundWindow() == hwnd)
+                        paste("38")
+                        free_placeholder = copy_tool(
+                            "ephone 38: существует в конфигурации",
+                            "Описание аппарата (description): FREE",
+                        )
+                        user32.SetForegroundWindow(report_hwnd)
+                        wait_until(lambda: user32.GetForegroundWindow() == report_hwnd)
+                        assert (
+                            copy_tool("Описание аппарата (description): FREE") == free_placeholder
+                        )
+                        user32.SetForegroundWindow(hwnd)
+                        wait_until(lambda: user32.GetForegroundWindow() == hwnd)
+                        paste_cme_config(cme_values.replace("button 1:85", "button bad"))
+                        assert_invalid_copy()
+                        user32.SetForegroundWindow(report_hwnd)
+                        wait_until(lambda: user32.GetForegroundWindow() == report_hwnd)
+                        assert_invalid_copy()
+                        user32.SetForegroundWindow(hwnd)
+                        wait_until(lambda: user32.GetForegroundWindow() == hwnd)
+                        paste_cme_config(cme_values)
+                        paste("585")
+                        assert copy_tool("ephone 585: существует в конфигурации") == cme_lookup
+                        user32.SetForegroundWindow(report_hwnd)
+                        wait_until(lambda: user32.GetForegroundWindow() == report_hwnd)
+                        assert copy_tool("ephone 585: существует в конфигурации") == cme_lookup
+                        checks.append(
+                            "CME report EXE: open report follows another query, blocks stale copy after invalid config and recovers after correction"
+                        )
+                        keys(0x1B)
+                        wait_until(lambda: not user32.IsWindowVisible(report_hwnd))
+                        user32.SetForegroundWindow(hwnd)
+                        wait_until(lambda: user32.GetForegroundWindow() == hwnd)
+                        focus_control(0)
+                        keys(0x11, 0x0D)
+                        report_hwnd = wait_until(
+                            lambda: find_window(isolated.resolve(), "Отчёт CUCME - Network Tools")
+                        )
+                        user32.SetForegroundWindow(report_hwnd)
+                        wait_until(lambda: user32.GetForegroundWindow() == report_hwnd)
+                        assert copy_tool("ephone 585: существует в конфигурации") == cme_lookup
+                        keys(0x1B)
+                        wait_until(lambda: not user32.IsWindowVisible(report_hwnd))
+                        user32.SetForegroundWindow(hwnd)
+                        wait_until(lambda: user32.GetForegroundWindow() == hwnd)
+                        checks.append(
+                            "CME report EXE: Escape closes the report, reopening shows the current result and preserves the config"
+                        )
+                        select_cme_search_kind(2, "Номер ephone-dn")
                         paste("85")
-                        copy_tool("ephone 585: ЗАНЯТ", "ephone-dn 85: ЗАНЯТ")
+                        copy_tool(
+                            "ephone 585: существует в конфигурации",
+                            "ephone-dn 85: существует в конфигурации",
+                        )
                         select_cme_search_kind(3, "Телефон")
                         paste("32085")
-                        copy_tool("ephone 585: ЗАНЯТ", "description DN (телефон): 32085")
+                        copy_tool(
+                            "ephone 585: существует в конфигурации", "Описание (description): 32085"
+                        )
                         select_cme_search_kind(4, "Имя / label")
                         paste("Example A.")
-                        copy_tool("name: Example Alex; label: Example A.")
+                        copy_tool("Имя (name): Example Alex; подпись (label): Example A.")
                         paste("office")
                         copy_tool("Example Alex Office", "button 1:85")
                         checks.append(
@@ -1141,7 +1222,7 @@ def run_ui_checks(binary: Path) -> tuple[list[str], list[dict]]:
                         focus_control(0)
                         keys(0x10, 0x09)  # Free mode radio.
                         keys(0x20)
-                        copy_tool("Свободные ephone-dn ID: 98", "Диапазон 1-100")
+                        copy_tool("Свободные номера ephone-dn: 98", "Диапазон 1-100")
                         write_clipboard("free CME DN sentinel")
                         focus_control(4)  # From, to, output, report, all numbers.
                         keys(0x20)
@@ -1171,7 +1252,9 @@ def run_ui_checks(binary: Path) -> tuple[list[str], list[dict]]:
                         select_cme_free_kind(1)
                         paste("584")
                         paste_control(1, "586")
-                        copy_tool("Свободные ephone ID: 2", "max-ephones ограничивает количество")
+                        copy_tool(
+                            "Свободные номера ephone: 2", "max-ephones ограничивает количество"
+                        )
                         focus_control(4)
                         keys(0x20)
                         wait_until(
@@ -1189,7 +1272,7 @@ def run_ui_checks(binary: Path) -> tuple[list[str], list[dict]]:
                             and value.replace("\r\n", "\n") == "31084\n31086"
                         )
                         checks.append(
-                            "CME EXE: ephone ID range is independent of max-ephones count; free telephone range excludes configured primary numbers"
+                            "CME EXE: ephone section range is independent of max-ephones count; free telephone range excludes configured primary numbers"
                         )
                         paste("bad")
                         assert_invalid_copy()
@@ -1197,9 +1280,11 @@ def run_ui_checks(binary: Path) -> tuple[list[str], list[dict]]:
                         for _ in range(3):
                             keys(0x10, 0x09)  # Search mode radio from the first range bound.
                         keys(0x20)
-                        select_cme_search_kind(1, "ephone ID")
+                        select_cme_search_kind(1, "Номер ephone")
                         paste("585")
-                        copy_tool("ephone 585: ЗАНЯТ", "description DN (телефон): 32085")
+                        copy_tool(
+                            "ephone 585: существует в конфигурации", "Описание (description): 32085"
+                        )
                         focus_control(0)
                         for _ in range(3):
                             keys(0x10, 0x09)
@@ -1215,7 +1300,7 @@ def run_ui_checks(binary: Path) -> tuple[list[str], list[dict]]:
                         keys(0x20)
                         assert_invalid_copy()
                         paste_cme_config(cme_values)
-                        copy_tool("ephone 585: ЗАНЯТ")
+                        copy_tool("ephone 585: существует в конфигурации")
                         checks.append(
                             "CME EXE: searches, mode switch and invalid range preserve the exact config; explicit Clear disables output and a new paste recovers"
                         )

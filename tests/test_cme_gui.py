@@ -61,16 +61,16 @@ def test_queries_modes_tab_theme_and_errors_reuse_model_and_keep_config(app):
         assert app.cme_config_input.get("1.0", "end-1c") == EXAMPLE_CONFIG
     app.cme_search_kind.set("Имя / label")
     app.cme_free_mode_button.invoke()
-    assert "Свободные ephone-dn ID: 98" in output(app)
+    assert "Свободные номера ephone-dn: 98" in output(app)
     app.cme_first.set("bad")
     assert app.cme_error.get()
     assert output(app) == "" and app.cme_copy_button.instate(["disabled"])
     app.cme_first.set("1")
     app.cme_search_mode_button.invoke()
     assert app.cme_search_kind.get() == "Имя / label"
-    app.cme_search_kind.set("ephone ID")
+    app.cme_search_kind.set("Номер ephone")
     app.cme_query.set("585")
-    assert "type: 7942" in output(app)
+    assert "Модель (type): 7942" in output(app)
     assert "MAC: 0011.2233.4455" in output(app)
     app.select_tool(0)
     app.set_theme("night")
@@ -84,18 +84,18 @@ def test_queries_modes_tab_theme_and_errors_reuse_model_and_keep_config(app):
 def test_all_search_fields_show_mapping_without_overwriting_description(app):
     load(app)
     for kind, query in (
-        ("ephone ID", "585"),
-        ("ephone-dn ID", "85"),
+        ("Номер ephone", "585"),
+        ("Номер ephone-dn", "85"),
         ("Телефон", "31085"),
         ("Имя / label", "Example A."),
         ("Имя / label", "Office"),
     ):
         app.cme_search_kind.set(kind)
         app.cme_query.set(query)
-        assert "ephone 585: ЗАНЯТ" in output(app)
+        assert "ephone 585: существует в конфигурации" in output(app)
         assert "button 1:85 -> ephone-dn 85" in output(app)
-        assert "description DN (телефон): 31085" in output(app)
-        assert "name: Example Alex; label: Example A." in output(app)
+        assert "Описание (description): 31085" in output(app)
+        assert "Имя (name): Example Alex; подпись (label): Example A." in output(app)
 
 
 def test_edit_invalidates_immediately_then_line_error_and_correction_preserve_input(app):
@@ -115,13 +115,13 @@ def test_edit_invalidates_immediately_then_line_error_and_correction_preserve_in
     assert app.root.clipboard_get() == "sentinel"
     load(app)
     assert app.cme_editor.error_line is None and app.cme_error.get() == ""
-    assert "ephone 585: ЗАНЯТ" in output(app)
+    assert "ephone 585: существует в конфигурации" in output(app)
 
 
 def test_free_resources_copy_and_limit_count_not_phone_tag(app):
     load(app)
     app.cme_mode.set("free")
-    app.cme_free_kind.set("ephone ID")
+    app.cme_free_kind.set("Номера ephone")
     app.cme_first.set("584")
     app.cme_last.set("586")
     assert app.cme_error.get() == ""
@@ -138,7 +138,7 @@ def test_free_resources_copy_and_limit_count_not_phone_tag(app):
 def test_pages_jump_report_shortcuts_and_readonly(app):
     load(app)
     app.cme_mode.set("free")
-    app.cme_free_kind.set("ephone ID")
+    app.cme_free_kind.set("Номера ephone")
     app.cme_last.set("1000")
     assert app.cme_free_result.total == 998
     app.cme_page_value.set("10")
@@ -178,7 +178,7 @@ def test_explicit_clear_discards_model_output_and_editor_undo_history(app):
     with pytest.raises(tk.TclError):
         app.cme_config_input.edit_undo()
     app.cme_example_button.invoke()
-    assert "ephone 585: ЗАНЯТ" in output(app)
+    assert "ephone 585: существует в конфигурации" in output(app)
 
 
 def test_large_free_list_can_copy_report_but_not_entire_list(app):
@@ -199,3 +199,116 @@ def test_search_keyboard_traversal_can_reach_configuration_and_actions(app):
     assert app.cme_free_mode_button.tk_focusPrev() == app.cme_search_mode_button
     assert app.cme_search_mode_button.tk_focusPrev() == app.cme_config_input
     assert app.cme_search_selector.tk_focusNext() == app.cme_output
+
+
+def expanded(app):
+    return app.cme_expanded_output.get("1.0", "end-1c")
+
+
+def test_expand_button_opens_one_large_readonly_report_with_exact_copy_and_theme(app):
+    load(app)
+    app.cme_query.set("585")
+    app.cme_expand_button.invoke()
+    app.root.update()
+    window = app.cme_report_window
+    assert window is not None and window.winfo_exists()
+    assert expanded(app) == output(app)
+    assert app.cme_expanded_output.winfo_height() > app.cme_output.winfo_height()
+    app.cme_expanded_output.insert("1.0", "bad")
+    assert expanded(app) == output(app)
+    app.cme_expanded_output.focus_force()
+    app.cme_expanded_output.event_generate("<Control-Shift-C>")
+    app.root.update()
+    assert app.root.clipboard_get() == output(app)
+    app._cme_report_buttons[0][0].invoke()
+    assert app.root.clipboard_get() == output(app)
+    app.open_cme_report()
+    assert app.cme_report_window is window
+    app.set_theme("night")
+    assert str(app.cme_expanded_output.cget("background")) == app.style.colors.inputbg
+    assert expanded(app) == output(app)
+    window.event_generate("<Escape>")
+    app.root.update()
+    assert app.cme_report_window is None
+    assert app.cme_config_input.get("1.0", "end-1c") == EXAMPLE_CONFIG
+    app.set_theme("day")
+    app.cme_query.set("760")
+    app.cme_expand_button.invoke()
+    assert expanded(app) == output(app) and "ephone 760: существует" in expanded(app)
+
+
+def test_open_report_follows_search_pages_and_reports_errors_without_stale_copy(app):
+    model = load(app)
+    app.cme_query.set("585")
+    app.open_cme_report()
+    app.cme_query.set("760")
+    assert expanded(app) == output(app) and "ephone 760: существует" in expanded(app)
+    app.cme_mode.set("free")
+    app.cme_free_kind.set("Номера ephone")
+    app.cme_last.set("1000")
+    next_button = app._cme_report_buttons[2][0]
+    previous_button = app._cme_report_buttons[1][0]
+    next_button.invoke()
+    assert "Страница 2 / 10" in expanded(app) and expanded(app) == output(app)
+    assert previous_button.instate(["!disabled"])
+    previous_button.invoke()
+    assert "Страница 1 / 10" in expanded(app)
+    app.cme_first.set("bad")
+    assert expanded(app) == output(app) == ""
+    assert app.cme_error.get()
+    assert all(button.instate(["disabled"]) for button, _ in app._cme_report_buttons)
+    app.root.clipboard_clear()
+    app.root.clipboard_append("sentinel")
+    app.copy_cme_report()
+    assert app.root.clipboard_get() == "sentinel"
+    app.cme_first.set("1")
+    assert expanded(app) == output(app) and "Свободные номера ephone" in expanded(app)
+    assert app.cme_config is model
+
+
+def test_open_report_clears_on_config_edit_parse_failure_and_explicit_clear(app):
+    load(app)
+    app.cme_query.set("585")
+    app.open_cme_report()
+    bad = EXAMPLE_CONFIG.replace("button 1:85", "button bad")
+    app.cme_editor.set_text(bad)
+    app._cme_config_changed()
+    assert expanded(app) == ""
+    app._cme_parse()
+    assert expanded(app) == "" and app.cme_error.get()
+    assert app.cme_config_input.get("1.0", "end-1c") == bad
+    load(app)
+    assert expanded(app) == output(app) and "ephone 585" in expanded(app)
+    app.clear_cme_config()
+    assert expanded(app) == "" and app.cme_config is None
+    assert all(button.instate(["disabled"]) for button, _ in app._cme_report_buttons)
+
+
+def test_report_shortcut_destroy_reopen_and_callback_failure_cleanup(app):
+    load(app)
+    app.cme_query.set("585")
+    for widget in (app.cme_query_entry, app.cme_config_input, app.cme_output):
+        widget.focus_force()
+        widget.event_generate("<Control-Return>")
+        app.root.update()
+        assert app.cme_report_window is not None
+        old_output = app.cme_expanded_output
+        app.cme_report_window.destroy()
+        assert app.cme_report_window is None and old_output not in app._plain_text_widgets
+    app.open_cme_report()
+    app._report_callback_error(RuntimeError, RuntimeError("test"), None)
+    assert expanded(app) == output(app) == ""
+    assert app.cme_config_input.get("1.0", "end-1c") == EXAMPLE_CONFIG
+    app.close_cme_report()
+    app.set_theme("night")
+
+
+def test_empty_report_and_empty_query_do_not_offer_stale_copy(app):
+    app.open_cme_report()
+    assert expanded(app) == ""
+    assert all(button.instate(["disabled"]) for button, _ in app._cme_report_buttons)
+    load(app)
+    app.cme_query.set("585")
+    app.cme_query.set("")
+    assert expanded(app) == output(app) and "Введите телефон" in expanded(app)
+    assert app._cme_report_buttons[0][0].instate(["disabled"])

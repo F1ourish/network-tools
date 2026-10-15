@@ -2,6 +2,7 @@
 
 import re
 import tkinter as tk
+from tkinter import font
 
 import ttkbootstrap as ttk
 
@@ -46,11 +47,14 @@ class CMEPanel:
         self._cme_job = None
         self.cme_config = None
         self.cme_free_result = None
+        self.cme_report_window = None
+        self.cme_expanded_output = None
+        self._cme_report_buttons = []
         self.cme_page_number, self.cme_pages = 0, 1
         self.cme_mode = tk.StringVar(self.root, value="search")
         self.cme_query = tk.StringVar(self.root)
         self.cme_search_kind = tk.StringVar(self.root, value="Любое поле")
-        self.cme_free_kind = tk.StringVar(self.root, value="ephone-dn ID")
+        self.cme_free_kind = tk.StringVar(self.root, value="Номера ephone-dn")
         self.cme_first = tk.StringVar(self.root, value="1")
         self.cme_last = tk.StringVar(self.root, value="100")
         self.cme_error = tk.StringVar(self.root)
@@ -97,7 +101,7 @@ class CMEPanel:
         for column in range(2):
             self.cme_search_frame.columnconfigure(column, weight=1)
         self.cme_query_entry = self._field(
-            self.cme_search_frame, "Номер, ID или часть имени", self.cme_query
+            self.cme_search_frame, "Телефон, номер ephone/DN или имя", self.cme_query
         )
         self.cme_search_selector = self._field(
             self.cme_search_frame, "Искать по", self.cme_search_kind, 1, values=tuple(SEARCH_KINDS)
@@ -117,9 +121,10 @@ class CMEPanel:
         )
         self.cme_free_frame.grid_remove()
         container, self.cme_output = self._text_widget(page, height=7, readonly=True)
-        container.grid(row=6, column=0, sticky="nsew")
+        self.cme_output.configure(font="TkDefaultFont", spacing1=2, spacing3=2)
+        container.grid(row=7, column=0, sticky="nsew")
         actions = ttk.Frame(page)
-        actions.grid(row=7, column=0, sticky="ew", pady=(7, 0))
+        actions.grid(row=8, column=0, sticky="ew", pady=(7, 0))
         self.cme_copy_button = ttk.Button(
             actions, text="Копировать отчёт", command=self.copy_cme_report
         )
@@ -143,7 +148,22 @@ class CMEPanel:
             text="Конфиг остаётся до явной очистки или закрытия. Данные не записываются на диск. Поиск по снимку, без проверки регистрации.",
             wraplength=780,
             bootstyle="secondary",
-        ).grid(row=8, column=0, sticky="ew", pady=(7, 0))
+        ).grid(row=9, column=0, sticky="ew", pady=(7, 0))
+        report_header = ttk.Frame(page)
+        report_header.grid(row=6, column=0, sticky="ew", pady=(0, 5))
+        ttk.Label(report_header, text="Отчёт").pack(side="left")
+        self.cme_expand_button = ttk.Button(
+            report_header, text="Развернуть отчёт", command=self.open_cme_report
+        )
+        self.cme_expand_button.pack(side="right")
+        for widget in (
+            self.cme_config_input,
+            self.cme_query_entry,
+            self.cme_first_entry,
+            self.cme_last_entry,
+            self.cme_output,
+        ):
+            widget.bind("<Control-Return>", self.open_cme_report)
         self.cme_mode.trace_add("write", self._cme_mode_changed)
         for variable in (
             self.cme_query,
@@ -174,6 +194,100 @@ class CMEPanel:
             self.cme_jump_entry,
         ):
             button.state(["disabled"])
+        self._sync_cme_report()
+
+    def _sync_cme_report(self):
+        if self.cme_report_window is None:
+            return
+        value = self.cme_output.get("1.0", "end-1c")
+        if self.cme_expanded_output.get("1.0", "end-1c") != value:
+            self._set_text(self.cme_expanded_output, value)
+            self.cme_expanded_output.yview_moveto(0)
+        for mirror, source in self._cme_report_buttons:
+            mirror.state(["disabled"] if source.instate(["disabled"]) else ["!disabled"])
+
+    def open_cme_report(self, _event=None):
+        if self.cme_report_window is not None:
+            self.cme_report_window.lift()
+            self.cme_report_window.after_idle(self.cme_expanded_output.focus_set)
+            return "break"
+        window = tk.Toplevel(self.root)
+        self.cme_report_window = window
+        window.title("Отчёт CUCME - Network Tools")
+        window.geometry(
+            f"{max(640, self.root.winfo_screenwidth() - 60)}x{max(400, self.root.winfo_screenheight() - 100)}+20+20"
+        )
+        window.minsize(640, 400)
+        window.columnconfigure(0, weight=1)
+        window.rowconfigure(2, weight=1)
+        summary = ttk.Label(window, textvariable=self.cme_summary, padding=(12, 10))
+        summary.grid(row=0, column=0, sticky="ew")
+        error = ttk.Label(window, textvariable=self.cme_error, bootstyle="danger")
+        error.grid(row=1, column=0, sticky="ew", padx=12, pady=(0, 5))
+        container, self.cme_expanded_output = self._text_widget(window, height=24, readonly=True)
+        self._cme_report_font = font.nametofont("TkDefaultFont").copy()
+        self._cme_report_font.configure(size=11)
+        self.cme_expanded_output.configure(font=self._cme_report_font, spacing1=2, spacing3=2)
+        container.grid(row=2, column=0, sticky="nsew", padx=12)
+        controls = ttk.Frame(window, padding=12)
+        controls.grid(row=3, column=0, sticky="ew")
+        for text, command, source in (
+            ("Копировать отчёт", self.copy_cme_report, self.cme_copy_button),
+            ("Назад", lambda: self._cme_move(-1), self.cme_prev_button),
+            ("Далее", lambda: self._cme_move(1), self.cme_next_button),
+        ):
+            button = ttk.Button(controls, text=text, command=command)
+            button.pack(side="left", padx=(0, 6))
+            self._cme_report_buttons.append((button, source))
+        ttk.Label(controls, textvariable=self.cme_page_label).pack(side="left", padx=6)
+        ttk.Button(controls, text="Вернуться · Esc", command=self.close_cme_report).pack(
+            side="right"
+        )
+        window.protocol("WM_DELETE_WINDOW", self.close_cme_report)
+        window.bind("<Escape>", self.close_cme_report)
+        window.bind("<Control-KeyPress>", self._cme_report_key)
+
+        def destroyed(event):
+            if event.widget == window:
+                self._plain_text_widgets.remove(self.cme_expanded_output)
+                self.cme_report_window = None
+                self.cme_expanded_output = None
+                self._cme_report_buttons = []
+
+        window.bind("<Destroy>", destroyed)
+
+        def resized(event):
+            if event.widget == window:
+                for label in (summary, error):
+                    label.configure(wraplength=max(300, event.width - 24))
+
+        window.bind("<Configure>", resized)
+        self._sync_cme_report()
+        self._apply_theme()
+        try:
+            window.state("zoomed")
+        except tk.TclError:
+            pass  # The initial screen-sized geometry also works without zoomed support.
+        window.after_idle(self.cme_expanded_output.focus_set)
+        return "break"
+
+    def _cme_report_key(self, event):
+        key = (
+            event.keycode == 67
+            if self.root.tk.call("tk", "windowingsystem") == "win32"
+            else event.keysym.lower() == "c"
+        )
+        if event.state & 1 and key:
+            self.copy_cme_report()
+            return "break"
+        return None
+
+    def close_cme_report(self, _event=None):
+        if self.cme_report_window is not None:
+            self.cme_report_window.destroy()
+            self.root.lift()
+            self.cme_expand_button.focus_set()
+        return "break"
 
     def _cme_config_changed(self, *_args):
         self._cancel_cme_job()
@@ -241,8 +355,9 @@ class CMEPanel:
                     self.cme_error.set("")
                     self._set_text(
                         self.cme_output,
-                        "Введите телефон, ID ephone/ephone-dn или часть имени. Конфигурация сохранена в памяти.",
+                        "Введите телефон, номер секции ephone/ephone-dn или часть имени. Конфигурация сохранена в памяти.",
                     )
+                    self._sync_cme_report()
                     return
                 value, pages = lookup_report(
                     config,
@@ -270,6 +385,7 @@ class CMEPanel:
         )
         self.cme_jump_entry.state(["!disabled"])
         self.cme_jump_button.state(["!disabled"])
+        self._sync_cme_report()
 
     def _cme_move(self, delta):
         target = self.cme_page_number + delta
