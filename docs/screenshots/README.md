@@ -1,5 +1,26 @@
 # Снимки Network Tools
 
+## Версия 1.7.1
+
+Снимки опубликованного `NetworkTools.exe` из [GitHub Actions run 38728763689](https://github.com/F1ourish/network-tools/actions/runs/38728763689).
+Источник - artifact `NetworkTools-verification-main`, папка `smoke-results`.
+Платформа - Windows-2025Server-10.0.26100-SP0; DPI 96, ночная тема.
+
+Source commit: `bf06c2ffb647789e5367078be797db356abfbd57`.
+SHA-256 EXE: `1d797ff46005cd6472ec315d95fee2bc352b6548f5ef24970878ad12747200c1`.
+
+| Файл в репозитории | Файл в артефакте |
+| --- | --- |
+| [cme-lookup-1.7.1.png](cme-lookup-1.7.1.png) | `smoke-results/cme-lookup-night.png` |
+| [cme-free-1.7.1.png](cme-free-1.7.1.png) | `smoke-results/cme-free-night.png` |
+| [cme-report-1.7.1.png](cme-report-1.7.1.png) | `smoke-results/cme-report-night.png` |
+| [cme-report-notes-1.7.1.png](cme-report-notes-1.7.1.png) | `smoke-results/cme-report-notes-night.png` |
+
+Конфигурация синтетическая: Example Alex, ephone 585, DN 85, тестовый MAC,
+description 32085 и number 31085. Добавлен ephone 38 с описанием FREE.
+Большое окно показывает ту же страницу и подробные замечания по всей конфигурации.
+Реальный пользовательский конфиг в снимки, тесты и поставку не включён.
+
 ## Версия 1.7.0
 
 Снимки настоящего опубликованного `NetworkTools.exe` из [GitHub Actions run 38721324422](https://github.com/F1ourish/network-tools/actions/runs/38721324422).
