@@ -1097,6 +1097,19 @@ def run_ui_checks(binary: Path) -> tuple[list[str], list[dict]]:
                             write_clipboard(value)
                             keys(0x11, ord("V"))
 
+                        def select_cme_search_kind(index, label):
+                            def selected():
+                                # A remapped frame can precede native popup focus readiness.
+                                # Verify the actual combobox value, then perform the search.
+                                keys(0x1B)
+                                select_choice(1, index)
+                                focus_control(1)
+                                keys(0x11, ord("A"))
+                                keys(0x11, ord("C"))
+                                return read_clipboard() == label
+
+                            wait_until(selected)
+
                         paste_cme_config(cme_values)
                         paste("585")
                         copy_tool(
@@ -1111,13 +1124,13 @@ def run_ui_checks(binary: Path) -> tuple[list[str], list[dict]]:
                         checks.append(
                             "CME EXE: full configuration paste maps ephone 585 -> button 1:85 -> DN 85; description, number, type and MAC remain distinct"
                         )
-                        select_choice(1, 2)  # ephone-dn ID.
+                        select_cme_search_kind(2, "ephone-dn ID")
                         paste("85")
                         copy_tool("ephone 585: ЗАНЯТ", "ephone-dn 85: ЗАНЯТ")
-                        select_choice(1, 3)  # Telephone: match the description as well as number.
+                        select_cme_search_kind(3, "Телефон")
                         paste("32085")
                         copy_tool("ephone 585: ЗАНЯТ", "description DN (телефон): 32085")
-                        select_choice(1, 4)  # Name/label plus ephone description.
+                        select_cme_search_kind(4, "Имя / label")
                         paste("Example A.")
                         copy_tool("name: Example Alex; label: Example A.")
                         paste("office")
@@ -1184,7 +1197,7 @@ def run_ui_checks(binary: Path) -> tuple[list[str], list[dict]]:
                         for _ in range(3):
                             keys(0x10, 0x09)  # Search mode radio from the first range bound.
                         keys(0x20)
-                        select_choice(1, 1)
+                        select_cme_search_kind(1, "ephone ID")
                         paste("585")
                         copy_tool("ephone 585: ЗАНЯТ", "description DN (телефон): 32085")
                         focus_control(0)

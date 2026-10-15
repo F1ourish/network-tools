@@ -59,6 +59,7 @@ def test_queries_modes_tab_theme_and_errors_reuse_model_and_keep_config(app):
         app.cme_query.set(query)
         assert app.cme_config is model
         assert app.cme_config_input.get("1.0", "end-1c") == EXAMPLE_CONFIG
+    app.cme_search_kind.set("Имя / label")
     app.cme_free_mode_button.invoke()
     assert "Свободные ephone-dn ID: 98" in output(app)
     app.cme_first.set("bad")
@@ -66,6 +67,8 @@ def test_queries_modes_tab_theme_and_errors_reuse_model_and_keep_config(app):
     assert output(app) == "" and app.cme_copy_button.instate(["disabled"])
     app.cme_first.set("1")
     app.cme_search_mode_button.invoke()
+    assert app.cme_search_kind.get() == "Имя / label"
+    app.cme_search_kind.set("ephone ID")
     app.cme_query.set("585")
     assert "type: 7942" in output(app)
     assert "MAC: 0011.2233.4455" in output(app)
