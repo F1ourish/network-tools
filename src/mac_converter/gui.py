@@ -13,6 +13,7 @@ from .acl import AclSyntaxError, check_conversation, make_flow, normalize_acl_pa
 from .acl_editor import AclEditor, AutoScrollbar
 from .acl_objects import ObjectGroupSyntaxError, normalize_object_paste, parse_object_groups
 from .clipboard import ClipboardUnavailable, clear_if_matches
+from .cme_gui import CMEPanel
 from .help_content import TOOL_HELP
 from .free_ips import (
     COPY_ALL_LIMIT,
@@ -81,7 +82,7 @@ class OutputTable:
             self.buttons[label].state(["disabled"])
 
 
-class MacConverterApp:
+class MacConverterApp(CMEPanel):
     def __init__(self, root: tk.Misc, *, settings_path: Path | None = None) -> None:
         self.root = root
         root.title(f"Network Tools {__version__}")
@@ -186,6 +187,7 @@ class MacConverterApp:
                 self._build_acl,
                 self._build_passwords,
                 self._build_free_ips,
+                self._build_cme,
             ),
             self.pages,
             strict=True,
@@ -1742,6 +1744,7 @@ class MacConverterApp:
         self.status.set("Пароль очищен")
 
     def close(self):
+        self._cancel_cme_job()
         self._cancel_free_ip_job()
         if self._acl_job is not None:
             self.root.after_cancel(self._acl_job)
@@ -1752,6 +1755,7 @@ class MacConverterApp:
 
     def _destroyed(self, event):
         if event.widget == self.root:
+            self._cancel_cme_job()
             self._cancel_free_ip_job()
             if self._acl_job is not None:
                 self.root.after_cancel(self._acl_job)
@@ -2044,6 +2048,8 @@ class MacConverterApp:
             self.copy_password()
         elif index == 6:
             self.copy_free_ip_report()
+        elif index == 7:
+            self.copy_cme_report()
         elif index == 4:
             self.copy_acl()
         elif self.mtu_calculation is not None:
@@ -2152,6 +2158,7 @@ class MacConverterApp:
             self.acl_entry,
             self.password_length_entry,
             self.free_ip_network_entry,
+            self.cme_first_entry if self.cme_mode.get() == "free" else self.cme_query_entry,
         )[index]
         entry.focus_set()
         entry.selection_range(0, tk.END)
@@ -2197,6 +2204,9 @@ class MacConverterApp:
         self.clear_password()
         self._cancel_free_ip_job()
         self._clear_free_ip_result()
+        self._cancel_cme_job()
+        self.cme_config = None
+        self._cme_clear_result()
         self.ipv4_calculation = None
         self.ipv4_binary.set("")
         for table in (

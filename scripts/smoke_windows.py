@@ -521,6 +521,22 @@ def run_ui_checks(binary: Path) -> tuple[list[str], list[dict]]:
                             checks.append(
                                 "Reopen: ARP/exclusions are not persisted; free-IP defaults and disabled copy restored"
                             )
+                            keys(0x11, ord("8"))
+                            assert_invalid_copy()
+                            focus_control(0)
+                            write_clipboard("empty CME query sentinel")
+                            keys(0x11, ord("A"))
+                            keys(0x11, ord("C"))
+                            assert read_clipboard() == "empty CME query sentinel"
+                            for _ in range(3):
+                                keys(0x10, 0x09)
+                            write_clipboard("empty CME config sentinel")
+                            keys(0x11, ord("A"))
+                            keys(0x11, ord("C"))
+                            assert read_clipboard() == "empty CME config sentinel"
+                            checks.append(
+                                "Reopen: CUCME configuration and query are empty, not persisted"
+                            )
                             keys(0x11, ord("6"))
                             assert_invalid_copy()
                             checks.append("Reopen: password is empty, not persisted")
@@ -1065,6 +1081,121 @@ def run_ui_checks(binary: Path) -> tuple[list[str], list[dict]]:
                         checks.append(
                             "Free IP EXE: invalid exclusions clear stale output and recover; /1 calculates without enumerating the network"
                         )
+                        keys(0x11, ord("8"))
+                        assert_invalid_copy()
+                        from mac_converter.cme_gui import EXAMPLE_CONFIG
+
+                        cme_values = EXAMPLE_CONFIG.replace(
+                            "description 31085", "description 32085"
+                        )
+
+                        def paste_cme_config(value):
+                            focus_control(0)  # Search entry, then backwards past both mode radios.
+                            for _ in range(3):
+                                keys(0x10, 0x09)
+                            keys(0x11, ord("A"))
+                            write_clipboard(value)
+                            keys(0x11, ord("V"))
+
+                        paste_cme_config(cme_values)
+                        paste("585")
+                        copy_tool(
+                            "ephone 585: ЗАНЯТ",
+                            "button 1:85 -> ephone-dn 85",
+                            "description DN (телефон): 32085",
+                            "number: 31085",
+                            "type: 7942",
+                            "MAC: 0011.2233.4455",
+                        )
+                        save_screenshot(hwnd, Path("smoke-results/cme-lookup-night.png"))
+                        checks.append(
+                            "CME EXE: full configuration paste maps ephone 585 -> button 1:85 -> DN 85; description, number, type and MAC remain distinct"
+                        )
+                        select_choice(1, 2)  # ephone-dn ID.
+                        paste("85")
+                        copy_tool("ephone 585: ЗАНЯТ", "ephone-dn 85: ЗАНЯТ")
+                        select_choice(1, 3)  # Telephone: match the description as well as number.
+                        paste("32085")
+                        copy_tool("ephone 585: ЗАНЯТ", "description DN (телефон): 32085")
+                        select_choice(1, 4)  # Name/label plus ephone description.
+                        paste("Example A.")
+                        copy_tool("name: Example Alex; label: Example A.")
+                        paste("office")
+                        copy_tool("Example Alex Office", "button 1:85")
+                        checks.append(
+                            "CME EXE: DN ID, description telephone, partial label/name and ephone description searches return the associated phone"
+                        )
+                        focus_control(0)
+                        keys(0x10, 0x09)  # Free mode radio.
+                        keys(0x20)
+                        copy_tool("Свободные ephone-dn ID: 98", "Диапазон 1-100")
+                        write_clipboard("free CME DN sentinel")
+                        focus_control(4)  # From, to, output, report, all numbers.
+                        keys(0x20)
+                        dn_values = wait_until(
+                            lambda: value
+                            if (value := read_clipboard()) and value.startswith("1\r\n2")
+                            else None
+                        ).splitlines()
+                        assert (
+                            len(dn_values) == 98 and "30" not in dn_values and "85" not in dn_values
+                        )
+                        save_screenshot(hwnd, Path("smoke-results/cme-free-night.png"))
+                        checks.append(
+                            "CME EXE: free DN range excludes both assigned DN 85 and empty existing DN 30; all-number clipboard contains 98 IDs"
+                        )
+
+                        def select_cme_free_kind(index):
+                            focus_control(0)
+                            keys(0x10, 0x09)  # Resource selector before the first bound.
+                            keys(0x28)
+                            keys(0x11, 0x24)
+                            for _ in range(index):
+                                keys(0x28)
+                            keys(0x0D)
+
+                        select_cme_free_kind(1)
+                        paste("584")
+                        paste_control(1, "586")
+                        copy_tool("Свободные ephone ID: 2", "max-ephones ограничивает количество")
+                        focus_control(4)
+                        keys(0x20)
+                        wait_until(lambda: read_clipboard().replace("\r\n", "\n") == "584\n586")
+                        select_cme_free_kind(2)
+                        paste("31084")
+                        paste_control(1, "31086")
+                        copy_tool("Свободные телефонные номера: 2")
+                        focus_control(4)
+                        keys(0x20)
+                        wait_until(lambda: read_clipboard().replace("\r\n", "\n") == "31084\n31086")
+                        checks.append(
+                            "CME EXE: ephone ID range is independent of max-ephones count; free telephone range excludes configured primary numbers"
+                        )
+                        paste("bad")
+                        assert_invalid_copy()
+                        focus_control(0)
+                        for _ in range(3):
+                            keys(0x10, 0x09)  # Search mode radio from the first range bound.
+                        keys(0x20)
+                        select_choice(1, 1)
+                        paste("585")
+                        copy_tool("ephone 585: ЗАНЯТ", "description DN (телефон): 32085")
+                        focus_control(0)
+                        for _ in range(3):
+                            keys(0x10, 0x09)
+                        keys(0x11, ord("A"))
+                        keys(0x11, ord("C"))
+                        wait_until(lambda: read_clipboard().replace("\r\n", "\n") == cme_values)
+                        focus_control(0)
+                        for _ in range(5):
+                            keys(0x10, 0x09)  # Config Text, paste, clear.
+                        keys(0x20)
+                        assert_invalid_copy()
+                        paste_cme_config(cme_values)
+                        copy_tool("ephone 585: ЗАНЯТ")
+                        checks.append(
+                            "CME EXE: searches, mode switch and invalid range preserve the exact config; explicit Clear disables output and a new paste recovers"
+                        )
                         # These are disposable test secrets; never print or capture them unmasked.
                         keys(0x11, ord("6"))
                         password_test_started = True
@@ -1185,6 +1316,7 @@ def run_ui_checks(binary: Path) -> tuple[list[str], list[dict]]:
                             (5, "ACL"),
                             (6, "Пароли"),
                             (7, "Свободные IP"),
+                            (8, "CUCME"),
                         ):
                             keys(0x11, ord(str(tool)))
                             keys(0x70)  # F1.
@@ -1219,13 +1351,19 @@ def run_ui_checks(binary: Path) -> tuple[list[str], list[dict]]:
                                     and "250" in help_text
                                     and "IPAM/DHCP" in help_text
                                 )
+                            elif tool == 8:
+                                assert (
+                                    "ephone-dn" in help_text
+                                    and "description" in help_text
+                                    and "max-ephones" in help_text
+                                )
                             save_screenshot(help_hwnd, Path(f"smoke-results/help-tool-{tool}.png"))
                             keys(0x1B)  # Escape.
                             wait_until(lambda: not user32.IsWindowVisible(help_hwnd))
                             user32.SetForegroundWindow(hwnd)
                             wait_until(lambda: user32.GetForegroundWindow() == hwnd)
                         checks.append(
-                            "Context help: F1, route/ACL/password/free-IP examples, readonly copy and Escape"
+                            "Context help: F1, route/ACL/password/free-IP/CUCME examples, readonly copy and Escape"
                         )
                         keys(0x11, ord("6"))
                         paste("20")
