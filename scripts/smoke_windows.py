@@ -336,10 +336,21 @@ def run_ui_checks(binary: Path) -> tuple[list[str], list[dict]]:
         user32.SetForegroundWindow(field_hwnd)
         wait_until(lambda: user32.GetForegroundWindow() == field_hwnd)
         write_clipboard("expanded field copy sentinel")
-        keys(0x11, ord("A"))
-        keys(0x11, ord("C"))
-        wait_until(lambda: (read_clipboard() or "").replace("\r\n", "\n") == expected)
+
+        def copied():
+            keys(0x11, ord("L"))
+            keys(0x11, ord("A"))
+            keys(0x11, ord("C"))
+            return (read_clipboard() or "").replace("\r\n", "\n") == expected
+
+        wait_until(copied)
         return field_hwnd
+
+    def close_field(field_hwnd):
+        keys(0x1B)
+        wait_until(lambda: not user32.IsWindowVisible(field_hwnd))
+        user32.SetForegroundWindow(hwnd)
+        wait_until(lambda: user32.GetForegroundWindow() == hwnd)
 
     def paste(value):
         focus_control(0)
@@ -820,23 +831,25 @@ def run_ui_checks(binary: Path) -> tuple[list[str], list[dict]]:
                         )
                         paste_control(1, "0.0.0.0/0 default\n10.20.30.0/24 access")
                         focus_control(1)
-                        expanded_field("Маршруты", "0.0.0.0/0 default\n10.20.30.0/24 access")
+                        field_hwnd = expanded_field(
+                            "Маршруты", "0.0.0.0/0 default\n10.20.30.0/24 access"
+                        )
                         write_clipboard("0.0.0.0/0 expanded default\n10.20.30.0/24 expanded access")
                         keys(0x11, ord("V"))
-                        keys(0x1B)
-                        user32.SetForegroundWindow(hwnd)
+                        close_field(field_hwnd)
                         paste("10.20.30.40")
                         route_report = copy_tool("[LPM] 10.20.30.0/24  expanded access")
                         focus_control(3)
-                        expanded_field("Совпадения маршрутов", route_report.replace("\r\n", "\n"))
+                        field_hwnd = expanded_field(
+                            "Совпадения маршрутов", route_report.replace("\r\n", "\n")
+                        )
                         keys(ord("X"))
                         keys(0x11, ord("A"))
                         keys(0x11, ord("C"))
                         assert (read_clipboard() or "").replace(
                             "\r\n", "\n"
                         ) == route_report.replace("\r\n", "\n")
-                        keys(0x1B)
-                        user32.SetForegroundWindow(hwnd)
+                        close_field(field_hwnd)
                         checks.append(
                             "Routes expansion EXE: edits synchronize to live results; expanded output is readonly and copies the exact report"
                         )
@@ -848,9 +861,10 @@ def run_ui_checks(binary: Path) -> tuple[list[str], list[dict]]:
                         save_screenshot(hwnd, Path("smoke-results/acl-request-reply-night.png"))
                         acl_report = copy_tool("запрос и ответ разрешены")
                         focus_control(20)
-                        expanded_field("Заключение ACL", acl_report.replace("\r\n", "\n"))
-                        keys(0x1B)
-                        user32.SetForegroundWindow(hwnd)
+                        field_hwnd = expanded_field(
+                            "Заключение ACL", acl_report.replace("\r\n", "\n")
+                        )
+                        close_field(field_hwnd)
                         checks.append(
                             "ACL conclusion EXE: local expansion shortcut opens the exact full readonly conversation report"
                         )
@@ -1148,17 +1162,15 @@ def run_ui_checks(binary: Path) -> tuple[list[str], list[dict]]:
                             "Free IP EXE: default .33/.34 exclusions, current-page and all-address clipboard output"
                         )
                         focus_control(4)
-                        expanded_field("Кандидаты по ARP", "\n".join(first_page))
-                        keys(0x1B)
-                        user32.SetForegroundWindow(hwnd)
+                        field_hwnd = expanded_field("Кандидаты по ARP", "\n".join(first_page))
+                        close_field(field_hwnd)
                         focus_control(3)
-                        expanded_field("ARP-список", cleaned_arp.replace("\r\n", "\n"))
+                        field_hwnd = expanded_field("ARP-список", cleaned_arp.replace("\r\n", "\n"))
                         write_clipboard(
                             arp_values + "Internet 192.0.2.3 0 0011.2233.4403 ARPA Vlan10\n"
                         )
                         keys(0x11, ord("V"))
-                        keys(0x1B)
-                        user32.SetForegroundWindow(hwnd)
+                        close_field(field_hwnd)
                         copy_tool("Кандидатов по ARP: 249")
                         paste_control(3, arp_values)
                         copy_tool("Кандидатов по ARP: 250")
