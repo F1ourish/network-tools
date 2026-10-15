@@ -80,6 +80,8 @@ def test_acl_fields_share_width_and_result_height_and_keep_all_controls_in_bound
     before = app.acl_output_area.winfo_height()
     drag(app, right, "y", dy=-50)
     assert app.acl_output_area.winfo_height() > before + 35
+    right.reset_size()
+    app.root.update()
     before = app.acl_output_area.winfo_height()
     drag(app, app.acl_output_area, "xy", dx=-100, dy=-35)
     assert app.acl_output_area.winfo_height() > before + 20

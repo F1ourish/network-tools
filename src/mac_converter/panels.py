@@ -163,7 +163,12 @@ def grid_split(parent, first, second, *, axis, slots, areas):
             info = child.grid_info()
             if int(info.get("columnspan" if axis == "x" else "rowspan", 1)) != 1:
                 continue
-            padding = parent.tk.splitlist(info["padx" if axis == "x" else "pady"])
+            raw_padding = info["padx" if axis == "x" else "pady"]
+            padding = (
+                raw_padding
+                if isinstance(raw_padding, (tuple, list))
+                else parent.tk.splitlist(str(raw_padding))
+            )
             pad = [parent.winfo_pixels(value) for value in padding]
             values.append(getattr(child, requested)() + (2 * pad[0] if len(pad) == 1 else sum(pad)))
         return max(values, default=0)
