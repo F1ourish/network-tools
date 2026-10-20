@@ -1245,9 +1245,9 @@ def run_ui_checks(binary: Path) -> tuple[list[str], list[dict]]:
                             "  Internet 192.0.2.2 - Incomplete ARPA Vlan10\n"
                             "switch#\n"
                         )
-                        paste_control(3, arp_values)
+                        paste_control(4, arp_values)
                         copy_tool("Подсеть: 192.0.2.0/24", "Кандидатов по ARP: 250")
-                        focus_control(3)
+                        focus_control(4)
                         keys(0x11, ord("A"))
                         keys(0x11, ord("C"))
                         cleaned_arp = wait_until(
@@ -1261,7 +1261,7 @@ def run_ui_checks(binary: Path) -> tuple[list[str], list[dict]]:
                             "Free IP EXE: Ctrl+7/Ctrl+L and ARP paste remove CLI rows and keep incomplete entries occupied"
                         )
                         write_clipboard("free IP page sentinel")
-                        focus_control(8)
+                        focus_control(9)
                         keys(0x20)
                         first_page = wait_until(
                             lambda: value
@@ -1271,7 +1271,7 @@ def run_ui_checks(binary: Path) -> tuple[list[str], list[dict]]:
                         assert len(first_page) == 100
                         assert "192.0.2.33" not in first_page and "192.0.2.34" not in first_page
                         write_clipboard("free IP all sentinel")
-                        focus_control(9)
+                        focus_control(10)
                         keys(0x20)
                         all_ips = wait_until(
                             lambda: value
@@ -1283,10 +1283,10 @@ def run_ui_checks(binary: Path) -> tuple[list[str], list[dict]]:
                         checks.append(
                             "Free IP EXE: default .33/.34 exclusions, current-page and all-address clipboard output"
                         )
-                        focus_control(4)
+                        focus_control(5)
                         field_hwnd = expanded_field("Кандидаты по ARP", "\n".join(first_page))
                         close_field(field_hwnd)
-                        focus_control(3)
+                        focus_control(4)
                         field_hwnd = expanded_field("ARP-список", cleaned_arp.replace("\r\n", "\n"))
                         write_clipboard(
                             arp_values + "Internet 192.0.2.3 0 0011.2233.4403 ARPA Vlan10\n"
@@ -1294,19 +1294,19 @@ def run_ui_checks(binary: Path) -> tuple[list[str], list[dict]]:
                         keys(0x11, ord("V"))
                         close_field(field_hwnd)
                         copy_tool("Кандидатов по ARP: 249")
-                        paste_control(3, arp_values)
+                        paste_control(4, arp_values)
                         copy_tool("Кандидатов по ARP: 250")
                         checks.append(
                             "Free IP expansion EXE: readonly candidate list copies exact IPs; expanded ARP edits normalize and update the calculation"
                         )
                         paste_control(2, ".33,.34,.50-.60,192.0.2.100-192.0.2.110")
                         copy_tool("Исключения охватывают: 24", "Кандидатов по ARP: 228")
-                        paste_control(12, "3")  # Prev disabled; Next, jump entry, jump button.
-                        focus_control(13)
+                        paste_control(13, "3")  # Prev disabled; Next, jump entry, jump button.
+                        focus_control(14)
                         keys(0x20)
                         copy_tool("Страница 3 / 3", "Кандидатов по ARP: 228")
                         write_clipboard("last free IP page sentinel")
-                        focus_control(8)
+                        focus_control(9)
                         keys(0x20)
                         last_page = wait_until(
                             lambda: value
