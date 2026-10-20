@@ -168,12 +168,13 @@ def test_shortcuts_theme_readonly_and_focus_order(app):
     app.root.update()
     assert "Кандидатов по ARP: 250" in app.root.clipboard_get()
     controls = [app.free_ip_network_entry]
-    for _ in range(10):
+    for _ in range(11):
         controls.append(controls[-1].tk_focusNext())
     assert controls == [
         app.free_ip_network_entry,
         app.free_ip_mask_entry,
         app.free_ip_exclusions_entry,
+        app.free_ip_check_entry,
         app.free_ip_arp_input,
         app.free_ip_output,
         app.free_ip_paste_button,

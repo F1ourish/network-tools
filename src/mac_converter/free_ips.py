@@ -142,6 +142,7 @@ def _clip(intervals, first: int, last: int) -> tuple[tuple[int, int], ...]:
 class FreeIPCalculation:
     network: IPv4Network
     arp: ArpInput
+    exclusions: Exclusions
     host_count: int
     arp_in_subnet: int
     occupied_hosts: int
@@ -210,6 +211,7 @@ def calculate_free_ips(
     return FreeIPCalculation(
         network,
         arp,
+        exclusions,
         host_count,
         sum(IPv4Address(address) in network for address in arp.addresses),
         len(occupied),
@@ -217,6 +219,82 @@ def calculate_free_ips(
         allowed,
         tuple(intervals),
         tuple(cumulative),
+    )
+
+
+@dataclass(frozen=True)
+class AddressCheck:
+    address: IPv4Address
+    network: IPv4Network
+    arp_present: bool
+    in_subnet: bool
+    host_position: bool
+    excluded: bool
+
+    @property
+    def candidate(self) -> bool:
+        return self.in_subnet and self.host_position and not self.arp_present and not self.excluded
+
+    @property
+    def status(self) -> str:
+        if not self.in_subnet:
+            return "Вне выбранной подсети"
+        if not self.host_position:
+            return "Адрес сети" if self.address == self.network.network_address else "Broadcast"
+        if self.arp_present:
+            return "Найден в ARP"
+        if self.excluded:
+            return "Исключён из назначения"
+        return "Кандидат на свободный по ARP"
+
+    def summary(self) -> str:
+        text = f"{self.address}: {self.status}."
+        if not self.candidate:
+            text += " ARP: " + ("найден." if self.arp_present else "не найден.")
+        if self.excluded and self.arp_present:
+            text += " Также входит в исключения."
+        return text
+
+    def text(self) -> str:
+        lines = [
+            f"Проверка IPv4: {self.address}",
+            f"Результат: {self.status}",
+            "ARP: "
+            + (
+                "найден в предоставленном списке."
+                if self.arp_present
+                else "не найден в предоставленном списке."
+            ),
+            f"Подсеть: {self.network}; {'входит' if self.in_subnet else 'не входит'}.",
+        ]
+        if self.in_subnet:
+            lines.append("Исключения: " + ("входит." if self.excluded else "не входит."))
+        if self.candidate:
+            lines.append(
+                "Отсутствие в ARP не подтверждает свободный адрес; сверить IPAM/DHCP и проверить конфликт."
+            )
+        return "\n".join(lines)
+
+
+def check_address(result: FreeIPCalculation, address_value: str) -> AddressCheck:
+    """Check exact ARP membership and the same subnet/exclusion snapshot as the list."""
+    address = ipv4_address(address_value)
+    number = int(address)
+    in_subnet = address in result.network
+    first = int(result.network.network_address) + (result.network.prefixlen < 31)
+    last = int(result.network.broadcast_address) - (result.network.prefixlen < 31)
+    exclusions = result.exclusions
+    excluded = in_subnet and (
+        number % 256 in exclusions.last_octets
+        or any(start <= number <= end for start, end in exclusions.intervals)
+    )
+    return AddressCheck(
+        address,
+        result.network,
+        number in result.arp.addresses,
+        in_subnet,
+        first <= number <= last,
+        excluded,
     )
 
 

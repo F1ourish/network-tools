@@ -627,7 +627,7 @@ def run_ui_checks(binary: Path) -> tuple[list[str], list[dict]]:
                             keys(0x11, ord("A"))
                             keys(0x11, ord("C"))
                             wait_until(lambda: read_clipboard() == ".33, .34")
-                            focus_control(3)
+                            focus_control(4)
                             write_clipboard("empty ARP sentinel")
                             keys(0x11, ord("A"))
                             keys(0x11, ord("C"))
@@ -1328,6 +1328,70 @@ def run_ui_checks(binary: Path) -> tuple[list[str], list[dict]]:
                         copy_tool("Кандидатов по ARP: 250")
                         checks.append(
                             "Free IP EXE: invalid exclusions clear stale output and recover; /1 calculates without enumerating the network"
+                        )
+                        paste_control(3, "192.0.2.3")
+                        copy_tool(
+                            "Проверка IPv4: 192.0.2.3",
+                            "Результат: Кандидат на свободный по ARP",
+                            "Кандидатов по ARP: 250",
+                        )
+                        for address in ("192.0.2.1", "192.0.2.2"):
+                            paste_control(3, address)
+                            copy_tool(f"Проверка IPv4: {address}", "Результат: Найден в ARP")
+                        checks.append(
+                            "Free IP address check EXE: exact ARP membership keeps present and incomplete neighbors unavailable; absent host becomes a candidate"
+                        )
+                        for address, status in (
+                            ("192.0.2.33", "Исключён из назначения"),
+                            ("192.0.2.34", "Исключён из назначения"),
+                            ("192.0.2.0", "Адрес сети"),
+                            ("192.0.2.255", "Broadcast"),
+                            ("198.51.100.1", "Вне выбранной подсети"),
+                        ):
+                            paste_control(3, address)
+                            copy_tool(
+                                f"Проверка IPv4: {address}",
+                                f"Результат: {status}",
+                                "Кандидатов по ARP: 250",
+                            )
+                        checks.append(
+                            "Free IP address check EXE: exclusions, network/broadcast and outside-subnet addresses are never candidates just because ARP lacks them"
+                        )
+                        paste_control(3, "192.0.2.3")
+                        paste_control(
+                            4, arp_values + "Internet 192.0.2.3 0 0011.2233.4403 ARPA Vlan10\n"
+                        )
+                        copy_tool(
+                            "Проверка IPv4: 192.0.2.3",
+                            "Результат: Найден в ARP",
+                            "Кандидатов по ARP: 249",
+                        )
+                        paste_control(4, arp_values)
+                        copy_tool(
+                            "Результат: Кандидат на свободный по ARP", "Кандидатов по ARP: 250"
+                        )
+                        paste_control(2, ".33,.34,.3")
+                        copy_tool("Результат: Исключён из назначения", "Кандидатов по ARP: 249")
+                        paste_control(2, ".33,.34")
+                        copy_tool(
+                            "Результат: Кандидат на свободный по ARP", "Кандидатов по ARP: 250"
+                        )
+                        save_screenshot(hwnd, Path("smoke-results/free-ip-address-check-night.png"))
+                        paste_control(3, "192.0.2.999")
+                        query_error = copy_tool("Проверка IPv4: IPv4:", "Кандидатов по ARP: 250")
+                        assert "Результат: Кандидат" not in query_error
+                        paste_control(3, "192.0.2.3")
+                        paste_control(4, "")
+                        assert_invalid_copy()
+                        paste_control(4, arp_values)
+                        copy_tool(
+                            "Результат: Кандидат на свободный по ARP", "Кандидатов по ARP: 250"
+                        )
+                        paste_control(3, "")
+                        query_cleared = copy_tool("Кандидатов по ARP: 250")
+                        assert "Проверка IPv4:" not in query_cleared
+                        checks.append(
+                            "Free IP address check EXE: ARP/exclusion edits recheck the retained query; empty ARP invalidates it and an invalid query preserves the candidate list"
                         )
                         keys(0x11, ord("8"))
                         assert_invalid_copy()

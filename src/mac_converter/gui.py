@@ -23,6 +23,7 @@ from .free_ips import (
     ArpSyntaxError,
     all_candidate_addresses,
     calculate_free_ips,
+    check_address,
     free_ip_page,
     normalize_arp_paste,
 )
@@ -1332,6 +1333,11 @@ class MacConverterApp(CMEPanel):
         self.free_ip_network = tk.StringVar(self.root, value="192.168.1.0")
         self.free_ip_mask = tk.StringVar(self.root, value="/24")
         self.free_ip_exclusions = tk.StringVar(self.root, value=DEFAULT_EXCLUSIONS)
+        self.free_ip_check_value = tk.StringVar(self.root)
+        self.free_ip_check_status = tk.StringVar(
+            self.root, value="Введите IPv4 для проверки по ARP."
+        )
+        self.free_ip_address_check = None
         self.free_ip_error = tk.StringVar(self.root)
         self.free_ip_summary = tk.StringVar(self.root)
         self.free_ip_page_label = tk.StringVar(self.root)
@@ -1350,16 +1356,28 @@ class MacConverterApp(CMEPanel):
         )
         exclusions = ttk.Frame(page)
         exclusions.grid(row=1, column=0, sticky="ew")
-        exclusions.columnconfigure(0, weight=1)
+        for column in range(2):
+            exclusions.columnconfigure(column, weight=1, uniform="free_ip_fields")
         self.free_ip_exclusions_entry = self._field(
             exclusions, "Исключения", self.free_ip_exclusions
         )
+        self.free_ip_check_entry = self._field(
+            exclusions, "Проверить конкретный IPv4", self.free_ip_check_value, 1
+        )
+        feedback = ttk.Frame(page)
+        feedback.grid(row=2, column=0, sticky="ew", pady=(5, 7))
+        for column in range(2):
+            feedback.columnconfigure(column, weight=1, uniform="free_ip_fields")
         ttk.Label(
-            page,
+            feedback,
             text=".33, .34, .50-.60, 192.0.2.100-192.0.2.110; короткая запись - последний октет.",
             bootstyle="secondary",
-            wraplength=780,
-        ).grid(row=2, column=0, sticky="ew", pady=(5, 7))
+            wraplength=370,
+        ).grid(row=0, column=0, sticky="nw", padx=(0, 12))
+        self.free_ip_check_label = ttk.Label(
+            feedback, textvariable=self.free_ip_check_status, wraplength=370, bootstyle="secondary"
+        )
+        self.free_ip_check_label.grid(row=0, column=1, sticky="nw")
         ttk.Label(page, textvariable=self.free_ip_error, bootstyle="danger", wraplength=780).grid(
             row=3, column=0, sticky="ew"
         )
@@ -1471,6 +1489,7 @@ class MacConverterApp(CMEPanel):
         self.free_ip_network.trace_add("write", self._free_ip_changed)
         self.free_ip_mask.trace_add("write", self._free_ip_mask_changed)
         self.free_ip_exclusions.trace_add("write", self._free_ip_changed)
+        self.free_ip_check_value.trace_add("write", self._free_ip_check_update)
 
     def _cancel_free_ip_job(self):
         if self._free_ip_job is not None:
@@ -1479,6 +1498,7 @@ class MacConverterApp(CMEPanel):
 
     def _clear_free_ip_result(self):
         self.free_ip_calculation = None
+        self._free_ip_check_update()
         self.free_ip_page_number = 0
         self.free_ip_summary.set("")
         self.free_ip_page_label.set("")
@@ -1545,6 +1565,29 @@ class MacConverterApp(CMEPanel):
             f"Исключения: {result.excluded_hosts}; кандидатов: {result.total}."
         )
         self._render_free_ip_page()
+        self._free_ip_check_update()
+
+    def _free_ip_check_update(self, *_args):
+        self.free_ip_address_check = None
+        self.free_ip_check_label.configure(bootstyle="secondary")
+        value = self.free_ip_check_value.get()
+        if not value.strip():
+            self.free_ip_check_status.set("Введите IPv4 для проверки по ARP.")
+            return
+        if self.free_ip_calculation is None:
+            self.free_ip_check_status.set(
+                "Для проверки адреса нужны корректные подсеть, ARP и исключения."
+            )
+            return
+        try:
+            check = check_address(self.free_ip_calculation, value)
+        except InvalidNetworkInput as error:
+            self.free_ip_check_status.set(f"Проверка IPv4: {error}")
+            self.free_ip_check_label.configure(bootstyle="danger")
+            return
+        self.free_ip_address_check = check
+        self.free_ip_check_status.set(check.summary())
+        self.free_ip_check_label.configure(bootstyle="success" if check.candidate else "warning")
 
     def _render_free_ip_page(self):
         result = self.free_ip_calculation
@@ -1602,6 +1645,7 @@ class MacConverterApp(CMEPanel):
     def free_ip_example(self):
         self.free_ip_network.set("192.0.2.0/24")
         self.free_ip_exclusions.set(DEFAULT_EXCLUSIONS)
+        self.free_ip_check_value.set("192.0.2.3")
         self.free_ip_arp_editor.set_text(
             "Internet 192.0.2.1 0 0011.2233.4401 ARPA Vlan10\n"
             "Internet 192.0.2.2 2 0011.2233.4402 ARPA Vlan10\n"
@@ -1619,7 +1663,14 @@ class MacConverterApp(CMEPanel):
 
     def copy_free_ip_report(self):
         if self.free_ip_calculation is not None:
-            self._copy(self.free_ip_calculation.report(self.free_ip_page_number))
+            report = self.free_ip_calculation.report(self.free_ip_page_number)
+            if self.free_ip_check_value.get().strip():
+                report += "\n\n" + (
+                    self.free_ip_address_check.text()
+                    if self.free_ip_address_check is not None
+                    else self.free_ip_check_status.get()
+                )
+            self._copy(report)
 
     def _build_passwords(self, page):
         self.password_length = tk.StringVar(self.root, value="20")
