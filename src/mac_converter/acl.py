@@ -63,11 +63,12 @@ def normalize_acl_paste(value: str) -> str:
 
 
 class AclSyntaxError(InvalidNetworkInput):
-    def __init__(self, line, rule, detail, side=None):
+    def __init__(self, line, rule, detail, side=None, label=None):
         self.line, self.rule, self.detail, self.side = line, rule, str(detail), side
+        self.label = label or (("ACL запроса", "ACL ответа")[side] if side is not None else "")
         sequence = re.match(r"([0-9]+)\s", rule)
         label = f" (sequence {sequence[1]})" if sequence else ""
-        prefix = ("ACL запроса: ", "ACL ответа: ")[side] if side is not None else ""
+        prefix = f"{self.label}: " if self.label else ""
         super().__init__(f"{prefix}Строка {line}{label}: {detail}\nПравило: {rule[:300]}")
 
 
@@ -109,12 +110,13 @@ class PortCondition:
     operator: str
     first: int
     last: int = 0
+    additional: tuple[int, ...] = ()
 
     def matches(self, port: int) -> bool:
         if self.operator == "eq":
-            return port == self.first
+            return port == self.first or port in self.additional
         if self.operator == "neq":
-            return port != self.first
+            return port != self.first and port not in self.additional
         if self.operator == "lt":
             return port < self.first
         if self.operator == "gt":
@@ -276,7 +278,13 @@ class _Tokens:
         last = port_number(self.take()) if operator == "range" else 0
         if operator == "range" and first > last:
             raise InvalidNetworkInput("Начало диапазона портов больше конца.")
-        return PortCondition(operator, first, last)
+        additional = []
+        if operator in ("eq", "neq"):
+            while self.peek() in PORTS or re.fullmatch(r"[0-9]+", self.peek()):
+                if len(additional) == 9:
+                    raise InvalidNetworkInput(f"После {operator} допускается от 1 до 10 портов.")
+                additional.append(port_number(self.take()))
+        return PortCondition(operator, first, last, tuple(additional))
 
 
 def _kind_for_number(name):
@@ -454,7 +462,13 @@ def check_conversation(
     forward_absent=False,
     reverse_absent=False,
     object_group_value="",
+    directions: tuple[str, str] | None = None,
 ) -> str:
+    labels = (
+        tuple(f"ACL {direction}" for direction in directions)
+        if directions
+        else ("ACL запроса", "ACL ответа")
+    )
     active_values = ([] if forward_absent else [forward_value]) + (
         [] if reverse_absent else [reverse_value]
     )
@@ -468,10 +482,23 @@ def check_conversation(
         try:
             return parse_acl(value, object_groups=groups)
         except AclSyntaxError as error:
-            raise AclSyntaxError(error.line, error.rule, error.detail, side) from None
+            raise AclSyntaxError(error.line, error.rule, error.detail, side, labels[side]) from None
         except InvalidNetworkInput as error:
-            prefix = ("ACL запроса", "ACL ответа")[side]
-            raise InvalidNetworkInput(f"{prefix}: {error}") from None
+            raise InvalidNetworkInput(f"{labels[side]}: {error}") from None
+
+    def context(acl, side, absent):
+        if directions is None:
+            return []
+        if acl is None:
+            return [
+                f"{labels[side]}: {'не назначена' if absent else 'не задана'}. "
+                f"{'Запрос' if side == 0 else 'Ответ'}: направление {directions[side]}."
+            ]
+        name = acl.name or "без имени"
+        return [
+            f"{labels[side]}: {name}; {'запрос' if side == 0 else 'ответ'}; "
+            f"ip access-group {acl.name or '<name>'} {directions[side]}"
+        ]
 
     forward_acl = None if forward_absent else parse_side(forward_value, 0)
     reverse_acl = (
@@ -482,7 +509,7 @@ def check_conversation(
         if forward_absent
         else evaluate_acl(forward_acl, flow)
     )
-    lines = [f"Запрос: {flow.text()}", request.text(), ""]
+    lines = [f"Запрос: {flow.text()}", *context(forward_acl, 0, forward_absent), request.text(), ""]
     if reverse_acl is None and not reverse_absent:
         lines.append("Ответ: ACL не задан, обратный поток не проверен.")
         lines.append(
@@ -501,7 +528,14 @@ def check_conversation(
             if reverse_absent
             else evaluate_acl(reverse_acl, reply)
         )
-        lines.extend([f"Ответ: {reply.text()}", response.text(), ""])
+        lines.extend(
+            [
+                f"Ответ: {reply.text()}",
+                *context(reverse_acl, 1, reverse_absent),
+                response.text(),
+                "",
+            ]
+        )
         if request.allowed is False or response.allowed is False:
             lines.append("Вывод: указанные ACL блокируют запрос или ответ.")
         elif forward_absent and reverse_absent:
@@ -515,3 +549,36 @@ def check_conversation(
         "TCP-ответ моделируется с ACK=1; established не является отслеживанием соединения."
     )
     return "\n".join(lines)
+
+
+def check_interface_acls(
+    inbound_value: str,
+    outbound_value: str,
+    flow: Flow,
+    *,
+    interface_at_source=True,
+    inbound_absent=False,
+    outbound_absent=False,
+    object_group_value="",
+) -> str:
+    """Keep Cisco in/out lists fixed; map the conversation at the selected interface."""
+    values = (inbound_value, outbound_value)
+    absent = (inbound_absent, outbound_absent)
+    order = (0, 1) if interface_at_source else (1, 0)
+    directions = ("in", "out") if interface_at_source else ("out", "in")
+    try:
+        report = check_conversation(
+            values[order[0]],
+            values[order[1]],
+            flow,
+            forward_absent=absent[order[0]],
+            reverse_absent=absent[order[1]],
+            object_group_value=object_group_value,
+            directions=directions,
+        )
+    except AclSyntaxError as error:
+        raise AclSyntaxError(
+            error.line, error.rule, error.detail, order[error.side], error.label
+        ) from None
+    location = "источника" if interface_at_source else "назначения"
+    return f"Интерфейс Cisco: со стороны {location}.\n\n{report}"

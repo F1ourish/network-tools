@@ -65,8 +65,9 @@ Sequence number задаёт порядок; смешивать нумерова
 Неразрешённые object-group, time-range, fragments и прочие неизвестные условия дают ошибку
 всего списка, даже после разрешающего правила. До 10000 строк / 1 МБ на поле.
 
-Первая ACL проверяет запрос. Вторая - ответ со сменой адресов и портов, ACK=1
-для TCP. Это не последовательная ingress/egress проверка одного пакета.
+Поля соответствуют ACL in и ACL out одного интерфейса. Программа выбирает список
+для запроса и ответа по стороне интерфейса. Ответ меняет адреса и порты, ACK=1
+для TCP. Это не последовательная проверка одного пакета на двух разных интерфейсах.
 Порт источника нужен для правил порта запроса и порта назначения ответа.
 Пустая вторая ACL означает, что ответ не проверен. established проверяет ACK/RST,
 а не соединение. NAT, маршрутизация, stateful firewall и фрагменты не моделируются.
@@ -79,6 +80,12 @@ Sequence number задаёт порядок; смешивать нумерова
 | --- | --- | --- |
 | Со стороны источника | `ip access-group <name> in` | `ip access-group <name> out` |
 | Со стороны назначения | `ip access-group <name> out` | `ip access-group <name> in` |
+
+Поля, состав и флажки всегда остаются при in/out; смена стороны интерфейса
+пересчитывает запрос/ответ без перестановки текста. Отчёт показывает имя ACL и направление.
+eq и neq поддерживают 1-10 портов с именами и номерами, отдельно для источника и назначения.
+eq www 443 сопоставляет 80 или 443; neq 22 3389 исключает оба. Прочие операторы
+сохраняют свой синтаксис: range требует две границы, lt/gt один порт.
 
 Номера слева - физические строки вставленного текста, sequence - номера правил.
 Вставка убирает пробелы по краям и Cisco counters, оставляя пустые строки.
@@ -125,7 +132,8 @@ ASA `network-object`, группы сервисов/протоколов и ди
 Неподдерживаемые/ошибочные правила сохраняются и дают ошибку: фильтр не скрывает условия ACL.
 
 
-Источники: [ACK/RST](https://www.cisco.com/c/en/us/support/docs/ip/access-lists/26448-ACLsamples.html),
+Источники: [списки портов eq/neq](https://www.cisco.com/c/en/us/td/docs/ios-xml/ios/sec_data_acl/configuration/15-s/sec-data-acl-15-s-book/sec-create-ip-al-filter.html),
+[ACK/RST](https://www.cisco.com/c/en/us/support/docs/ip/access-lists/26448-ACLsamples.html),
 [sequence number](https://www.cisco.com/c/en/us/td/docs/ios-xml/ios/sec_data_acl/configuration/xe-3e/sec-data-acl-xe-3e-book/sec-acl-seq-num.html),
 [Cisco IOS access lists](https://www.cisco.com/c/en/us/support/docs/security/ios-firewall/23602-confaccesslists.html),
 [Catalyst IOS XE: object-group, show object-group и ip access-group in/out](https://www.cisco.com/c/en/us/td/docs/switches/lan/catalyst9500/software/release/17-13/configuration_guide/sec/b_1713_sec_9500_cg/object_groups_for_acls.html).

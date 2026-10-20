@@ -113,9 +113,13 @@ def test_error_highlights_correct_editor_line_and_clears_when_fixed(app):
 def test_cisco_direction_labels_follow_selected_interface_side(app):
     assert "<name> in" in app.acl_direction_labels[0].get()
     assert "<name> out" in app.acl_direction_labels[1].get()
+    assert "ACL in - запрос" in app.acl_direction_labels[0].get()
+    assert "ACL out - ответ" in app.acl_direction_labels[1].get()
     app.acl_interface.set("Со стороны назначения")
-    assert "<name> out" in app.acl_direction_labels[0].get()
-    assert "<name> in" in app.acl_direction_labels[1].get()
+    assert "<name> in" in app.acl_direction_labels[0].get()
+    assert "<name> out" in app.acl_direction_labels[1].get()
+    assert "ACL in - ответ" in app.acl_direction_labels[0].get()
+    assert "ACL out - запрос" in app.acl_direction_labels[1].get()
 
 
 def test_expanded_editor_follows_main_edits_examples_and_clear(app):

@@ -9,7 +9,7 @@ from types import TracebackType
 import ttkbootstrap as ttk
 
 from . import __version__
-from .acl import AclSyntaxError, check_conversation, make_flow, normalize_acl_paste
+from .acl import AclSyntaxError, check_interface_acls, make_flow, normalize_acl_paste
 from .acl_editor import AclEditor, AutoScrollbar
 from .acl_objects import ObjectGroupSyntaxError, normalize_object_paste, parse_object_groups
 from .clipboard import ClipboardUnavailable, clear_if_matches
@@ -825,7 +825,7 @@ class MacConverterApp(CMEPanel):
         ).grid(row=0, column=0, sticky="ew", pady=(0, 4))
         ttk.Label(
             summary,
-            text="ACL Cisco IOS IPv4. Вторая ACL проверяет ответ: IP и порты меняются местами.",
+            text="Вставьте ACL интерфейса по командам Cisco: in слева, out справа. Сторона интерфейса определяет путь запроса и ответа.",
             wraplength=780,
             bootstyle="secondary",
         ).grid(row=1, column=0, sticky="ew")
@@ -887,6 +887,7 @@ class MacConverterApp(CMEPanel):
             widget.bind("<Control-Return>", lambda _e, index=column: self.open_acl_editor(index))
             self.acl_inputs.append(widget)
         self.acl_forward_input, self.acl_reverse_input = self.acl_inputs
+        self.acl_inbound_input, self.acl_outbound_input = self.acl_inputs
         self.acl_editors[1].horizontal_side = "left"
         grid_split(lists, *self.acl_input_panels, axis="x", slots=(0, 1), areas=self.acl_editors)
         actions = ttk.Frame(page)
@@ -982,17 +983,17 @@ class MacConverterApp(CMEPanel):
 
     def _acl_direction_update(self, *_args):
         origin = self.acl_interface.get() == "Со стороны источника"
-        directions = ("in", "out") if origin else ("out", "in")
-        for index, direction in enumerate(directions):
-            title = ("ACL запроса", "ACL ответа")[index]
+        for index, direction in enumerate(("in", "out")):
+            role = "запрос" if (index == 0) == origin else "ответ"
             motion = (
-                "Пакет входит в устройство с этого интерфейса."
+                "Из подключённой сети в устройство."
                 if direction == "in"
-                else "Пакет выходит из устройства через этот интерфейс."
+                else "Из устройства в подключённую сеть."
             )
             self.acl_direction_labels[index].set(
-                f"{title}: ip access-group <name> {direction}\n{motion}"
+                f"ACL {direction} - {role}: ip access-group <name> {direction}\n{motion}"
             )
+        self._acl_flow_update()
 
     def _acl_editor_changed(self, event, index):
         value = event.widget.get("1.0", "end-1c")
@@ -1016,7 +1017,7 @@ class MacConverterApp(CMEPanel):
             window.after_idle(editor.text.focus_set)
             return "break"
         window = tk.Toplevel(self.root)
-        window.title(("ACL запроса", "ACL ответа")[index] + " - Network Tools")
+        window.title(("ACL in", "ACL out")[index] + " - Network Tools")
         window.geometry(
             f"{max(700, self.root.winfo_screenwidth() - 60)}x{max(500, self.root.winfo_screenheight() - 100)}+20+20"
         )
@@ -1249,6 +1250,7 @@ class MacConverterApp(CMEPanel):
         self.acl_source_port.set("53000")
         self.acl_destination_port.set("443")
         self.acl_ack.set(False)
+        self.acl_interface.set("Со стороны источника")
         for absent in self.acl_absent:
             absent.set(False)
         examples = (
@@ -1295,12 +1297,13 @@ class MacConverterApp(CMEPanel):
                 self.acl_destination_port.get(),
                 self.acl_ack.get(),
             )
-            result = check_conversation(
-                self.acl_forward_input.get("1.0", "end-1c"),
-                self.acl_reverse_input.get("1.0", "end-1c"),
+            result = check_interface_acls(
+                self.acl_inbound_input.get("1.0", "end-1c"),
+                self.acl_outbound_input.get("1.0", "end-1c"),
                 flow,
-                forward_absent=self.acl_absent[0].get(),
-                reverse_absent=self.acl_absent[1].get(),
+                interface_at_source=self.acl_interface.get() == "Со стороны источника",
+                inbound_absent=self.acl_absent[0].get(),
+                outbound_absent=self.acl_absent[1].get(),
                 object_group_value=self.acl_objects_value,
             )
         except InvalidNetworkInput as error:

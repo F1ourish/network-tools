@@ -904,6 +904,96 @@ def run_ui_checks(binary: Path) -> tuple[list[str], list[dict]]:
                         checks.append(
                             "ACL conclusion EXE: local expansion shortcut opens the exact full readonly conversation report"
                         )
+                        paste_control(11, "")
+                        paste_control(
+                            7,
+                            "edge#show ip access-lists WEB\nExtended IP access list WEB\n"
+                            " 180 permit tcp any any eq www 443 log (2 matches)\n"
+                            " 190 deny ip any any\nedge#",
+                        )
+                        for port in ("80", "443"):
+                            paste_control(4, port)
+                            copy_tool("ACL in: WEB; запрос", "РАЗРЕШЁН: sequence 180")
+                        paste_control(4, "81")
+                        copy_tool("БЛОКИРУЕТСЯ: sequence 190")
+                        checks.append(
+                            "ACL port lists EXE: full Cisco paste accepts www/443 alternatives and rejects an unlisted destination"
+                        )
+                        paste_control(4, "443")
+                        paste_control(
+                            7, "180 permit tcp any eq 22 53000 any eq www 443\n190 deny ip any any"
+                        )
+                        for port in ("22", "53000"):
+                            paste_control(3, port)
+                            copy_tool("РАЗРЕШЁН: sequence 180")
+                        paste_control(3, "53")
+                        copy_tool("БЛОКИРУЕТСЯ: sequence 190")
+                        paste_control(
+                            7, "180 permit tcp any neq 22 53000 any eq www 443\n190 deny ip any any"
+                        )
+                        copy_tool("РАЗРЕШЁН: sequence 180")
+                        for port in ("22", "53000"):
+                            paste_control(3, port)
+                            copy_tool("БЛОКИРУЕТСЯ: sequence 190")
+                        paste_control(3, "")
+                        copy_tool("НЕДОСТАТОЧНО ДАННЫХ", "Неизвестен порт источника")
+                        checks.append(
+                            "ACL port lists EXE: source eq alternatives, neq exclusions and an unknown client port keep their exact semantics"
+                        )
+                        paste_control(0, "203.0.113.198")
+                        paste_control(1, "198.51.100.30")
+                        paste_control(
+                            7,
+                            "ip access-list extended SERVICE-FROM\n"
+                            "10 permit tcp 198.51.100.0 0.0.0.255 any established\n"
+                            "160 permit ip any any log",
+                        )
+                        interface_out = (
+                            "ip access-list extended SERVICE-TO\n10 permit tcp any any established\n"
+                            "180 permit tcp 192.0.2.0 0.0.0.255 host 198.51.100.20 eq www 443\n"
+                            "190 permit tcp 192.0.2.0 0.0.0.255 any eq 22 3389\n"
+                            "250 permit ip any any log"
+                        )
+                        paste_control(11, interface_out)
+                        select_choice(6, 1)  # Interface next to the destination subnet.
+                        report = copy_tool(
+                            "со стороны назначения",
+                            "ACL out: SERVICE-TO; запрос",
+                            "РАЗРЕШЁН: sequence 250",
+                            "ACL in: SERVICE-FROM; ответ",
+                            "запрос и ответ разрешены",
+                        )
+                        request_part, reply_part = report.split("Ответ: TCP", 1)
+                        assert "sequence 250" in request_part and "sequence 10" in reply_part
+                        save_screenshot(hwnd, Path("smoke-results/acl-interface-night.png"))
+                        select_choice(6, 0)
+                        copy_tool(
+                            "ACL in: SERVICE-FROM; запрос",
+                            "РАЗРЕШЁН: sequence 160",
+                            "ACL out: SERVICE-TO; ответ",
+                        )
+                        select_choice(6, 1)
+                        copy_tool("ACL out: SERVICE-TO; запрос", "РАЗРЕШЁН: sequence 250")
+                        checks.append(
+                            "ACL interface EXE: unchanged in/out fields remap request/reply when the interface side changes; names and directions identify the real rules"
+                        )
+                        paste_control(11, interface_out.replace("250 permit", "250 deny"))
+                        report = copy_tool(
+                            "ACL out: SERVICE-TO; запрос", "БЛОКИРУЕТСЯ: sequence 250"
+                        )
+                        assert "БЛОКИРУЕТСЯ: sequence 250" in report.split("Ответ: TCP", 1)[0]
+                        focus_control(14)
+                        keys(0x20)
+                        copy_tool("ACL out: не назначена", "запрос и ответ разрешены")
+                        focus_control(14)
+                        keys(0x20)
+                        copy_tool("БЛОКИРУЕТСЯ: sequence 250")
+                        checks.append(
+                            "ACL interface EXE: destination out deny blocks the request; its absent flag skips and restores only that same list"
+                        )
+                        focus_control(15)  # HTTPS example restores the default source-side setup.
+                        keys(0x20)
+                        copy_tool("со стороны источника", "запрос и ответ разрешены")
                         paste_control(11, "10 deny ip any any")
                         blocked_reply = copy_tool(
                             "БЛОКИРУЕТСЯ: sequence 10, строка 1", "ACL блокируют"
@@ -959,7 +1049,7 @@ def run_ui_checks(binary: Path) -> tuple[list[str], list[dict]]:
                         focus_control(9)  # Interface selector, request editor, Paste, Expand.
                         keys(0x20)
                         expanded = wait_until(
-                            lambda: find_window(isolated.resolve(), "ACL запроса - Network Tools")
+                            lambda: find_window(isolated.resolve(), "ACL in - Network Tools")
                         )
                         user32.SetForegroundWindow(expanded)
                         wait_until(lambda: user32.GetForegroundWindow() == expanded)
@@ -990,9 +1080,7 @@ def run_ui_checks(binary: Path) -> tuple[list[str], list[dict]]:
                         save_screenshot(expanded, Path("smoke-results/acl-expanded-night.png"))
                         keys(0x1B)
                         wait_until(
-                            lambda: not find_window(
-                                isolated.resolve(), "ACL запроса - Network Tools"
-                            )
+                            lambda: not find_window(isolated.resolve(), "ACL in - Network Tools")
                         )
                         user32.SetForegroundWindow(hwnd)
                         copy_tool("РАЗРЕШЁН: sequence 42, строка 1", "\n  42 permit ip any any\n")
@@ -1011,7 +1099,7 @@ def run_ui_checks(binary: Path) -> tuple[list[str], list[dict]]:
                         focus_control(9)
                         keys(0x20)
                         expanded = wait_until(
-                            lambda: find_window(isolated.resolve(), "ACL запроса - Network Tools")
+                            lambda: find_window(isolated.resolve(), "ACL in - Network Tools")
                         )
                         user32.SetForegroundWindow(expanded)
                         wait_until(lambda: user32.GetForegroundWindow() == expanded)
@@ -1020,9 +1108,7 @@ def run_ui_checks(binary: Path) -> tuple[list[str], list[dict]]:
                         )
                         keys(0x1B)
                         wait_until(
-                            lambda: not find_window(
-                                isolated.resolve(), "ACL запроса - Network Tools"
-                            )
+                            lambda: not find_window(isolated.resolve(), "ACL in - Network Tools")
                         )
                         user32.SetForegroundWindow(hwnd)
                         focus_control(10)
