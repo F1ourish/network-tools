@@ -1485,7 +1485,7 @@ def run_ui_checks(binary: Path) -> tuple[list[str], list[dict]]:
                             "Описание (description): 32085",
                             "Телефонный номер (number): 31085",
                             "Модель (type): 7942",
-                            "MAC: 0011.2233.4455",
+                            "MAC-адрес аппарата: 0011.2233.4455",
                             "Если занято (busy): 31900",
                             "Если нет ответа (noan): 31901 timeout 20",
                         )
@@ -1627,6 +1627,33 @@ def run_ui_checks(binary: Path) -> tuple[list[str], list[dict]]:
                         return_to_cme(report_hwnd)
                         checks.append(
                             "CME table EXE: native Treeview and expanded view align both-free and independently occupied ephone/DN cells; selection copies TSV"
+                        )
+                        set_cme_bound(0, "584")
+                        set_cme_bound(1, "586")
+                        mac_report = copy_tool(
+                            "Номера секций 584-586", "MAC ephone", "0011.2233.4455"
+                        )
+                        keys(0x75)
+                        mac_table = read_cme_text(
+                            "Номер\tephone\tephone-dn\tMAC ephone", "585\t✗ 585"
+                        )
+                        mac_rows = mac_table.splitlines()
+                        assert len(mac_rows) == 4
+                        assert mac_rows[2].split("\t")[3] == "0011.2233.4455"
+                        assert mac_rows[1].split("\t")[3] == mac_rows[3].split("\t")[3] == "-"
+                        keys(0x24)  # Home, then the occupied ephone row.
+                        keys(0x28)
+                        save_screenshot(hwnd, Path("smoke-results/cme-mac-table-night.png"))
+                        keys(0x11, 0x0D)
+                        report_hwnd = activate_cme_window("Отчёт CUCME")
+                        assert copy_tool("MAC ephone", "0011.2233.4455") == mac_report
+                        assert read_cme_text("Номер\tephone\tephone-dn\tMAC ephone") == mac_table
+                        save_screenshot(
+                            report_hwnd, Path("smoke-results/cme-mac-expanded-night.png")
+                        )
+                        return_to_cme(report_hwnd)
+                        checks.append(
+                            "CME MAC EXE: ephone MAC column is present in the native and expanded tables and TSV; uncreated ephones have no invented address"
                         )
                         set_cme_bound(0, "1")
                         set_cme_bound(1, "1000")

@@ -108,7 +108,7 @@ def test_reports_show_distinct_description_number_label_name_and_hardware():
         "Дополнительный номер (secondary): 32085",
         "Имя (name): Example Alex; подпись (label): Example A.",
         "Модель (type): 7942",
-        "MAC: 0011.2233.4455",
+        "MAC-адрес аппарата: 0011.2233.4455",
     ):
         assert value in report
     assert pages == 1
@@ -421,7 +421,7 @@ def test_paired_table_preserves_independent_namespaces_and_dangling_references()
     table = section_availability(config, "46", "51")
     rows, pages = table.page()
     assert pages == 1 and len(rows) == 6
-    assert rows[0] == ("46", "✓ 46 - секция не создана", "✓ 46 - секция не создана")
+    assert rows[0] == ("46", "✓ 46 - секция не создана", "✓ 46 - секция не создана", "-")
     assert rows[1][1].startswith("✗ 47") and rows[1][2].startswith("✓ 47")
     assert rows[2][1].startswith("✓ 48") and rows[2][2].startswith("✗ 48")
     assert rows[3][2] == "✗ 49 - ссылка button"

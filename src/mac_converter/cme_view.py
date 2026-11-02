@@ -6,6 +6,7 @@ from tkinter import font
 import ttkbootstrap as ttk
 
 from .acl_editor import AutoScrollbar
+from .cme import PAIR_HEADERS, PAIR_MAC_NOTE
 from .panels import ResizableArea
 
 
@@ -33,19 +34,26 @@ class CMEReportView(ResizableArea):
         summary.grid(row=0, column=0, columnspan=2, sticky="ew")
         self.table = ttk.Treeview(
             self.table_frame,
-            columns=("number", "ephone", "dn"),
+            columns=("number", "ephone", "dn", "mac"),
             show="headings",
             height=4,
             selectmode="extended",
             takefocus=True,
         )
-        for name, title, width in (
-            ("number", "Номер", 75),
-            ("ephone", "ephone", 260),
-            ("dn", "ephone-dn", 280),
+        mac_width = max(178, font.nametofont("TkDefaultFont").measure("FFFF.FFFF.FFFF") + 28)
+        for (name, width), title in zip(
+            (("number", 75), ("ephone", 220), ("dn", 240), ("mac", mac_width)),
+            PAIR_HEADERS,
+            strict=True,
         ):
             self.table.heading(name, text=title)
-            self.table.column(name, width=width, minwidth=60, stretch=name != "number", anchor="w")
+            self.table.column(
+                name,
+                width=width,
+                minwidth=mac_width if name == "mac" else 60,
+                stretch=name in ("ephone", "dn"),
+                anchor="w",
+            )
         self.table.grid(row=1, column=0, sticky="nsew")
         vertical = AutoScrollbar(
             self.table_frame, orient="vertical", command=self.table.yview, takefocus=False
@@ -74,7 +82,7 @@ class CMEReportView(ResizableArea):
             self.table.delete(*self.table.get_children())
             for row in rows:
                 self.table.insert("", "end", values=row)
-            self.summary.set("\n".join(value.splitlines()[:2]))
+            self.summary.set("\n".join([*value.splitlines()[:2], PAIR_MAC_NOTE]))
             self.table.yview_moveto(0)
         else:
             self.table_frame.grid_remove()
@@ -103,8 +111,12 @@ class CMEReportView(ResizableArea):
     def copy_rows(self):
         selected = self.table.selection() or self.table.get_children()
         if selected:
-            value = "Номер\tephone\tephone-dn\n" + "\n".join(
-                "\t".join(map(str, self.table.item(item, "values"))) for item in selected
+            value = (
+                "\t".join(PAIR_HEADERS)
+                + "\n"
+                + "\n".join(
+                    "\t".join(map(str, self.table.item(item, "values"))) for item in selected
+                )
             )
             self.app._copy(value)
 

@@ -77,7 +77,7 @@ def test_queries_modes_tab_theme_and_errors_reuse_model_and_keep_config(app):
     app.cme_search_kind.set("Номер ephone")
     app.cme_query.set("585")
     assert "Модель (type): 7942" in output(app)
-    assert "MAC: 0011.2233.4455" in output(app)
+    assert "MAC-адрес аппарата: 0011.2233.4455" in output(app)
     app.select_tool(0)
     app.set_theme("night")
     app.select_tool(7)
@@ -372,7 +372,10 @@ def test_real_pair_table_and_expanded_table_show_same_rows_and_copy_tsv(app):
     assert [mirror.item(item, "values") for item in mirror.get_children()] == rows
     app.cme_report_view.table.selection_set(app.cme_table.get_children()[1])
     app.cme_report_view.copy_rows()
-    assert app.root.clipboard_get().splitlines() == ["Номер\tephone\tephone-dn", "\t".join(rows[1])]
+    assert app.root.clipboard_get().splitlines() == [
+        "Номер\tephone\tephone-dn\tMAC ephone",
+        "\t".join(rows[1]),
+    ]
     app.cme_copy_numbers_button.invoke()
     assert len(app.root.clipboard_get().splitlines()) == 4
     app.cme_last.set("1000")

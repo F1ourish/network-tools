@@ -13,6 +13,8 @@ MAX_CONFIG_LINES = 30000
 MAX_TAG = 1000000
 MAX_LINKS = 100000
 COPY_LIMIT = 10000
+PAIR_HEADERS = ("Номер", "ephone", "ephone-dn", "MAC ephone")
+PAIR_MAC_NOTE = "MAC ephone относится к аппарату этой строки; привязка к DN определяется по button."
 SEARCH_KINDS = {
     "Любое поле": "all",
     "Номер ephone": "ephone",
@@ -542,11 +544,13 @@ def lookup_report(
         if phone:
             lines += [
                 f"ephone {phone.tag}: существует в конфигурации (строка {phone.line})",
+                f"MAC-адрес аппарата: {phone.mac or 'не указан в конфигурации'}",
                 f"Описание аппарата (description): {phone.description or 'не указано'}",
-                f"Модель (type): {phone.model or 'не указана'}; MAC: {phone.mac or 'не указан'}",
+                f"Модель (type): {phone.model or 'не указана'}",
             ]
         else:
             lines.append("ephone: привязка в предоставленном конфиге отсутствует.")
+            lines.append("MAC-адрес аппарата: нет привязанного ephone.")
         if link.button:
             lines.append(
                 f"button {link.button.text} -> ephone-dn {link.dn}"
@@ -738,7 +742,8 @@ class SectionAvailability:
             dn_status = f"✗ {tag} - выше max-dn {self.config.max_dn}"
         else:
             dn_status = f"✓ {tag} - секция не создана"
-        return str(tag), phone_status, dn_status
+        mac = (phone.mac or "не указан") if phone else "-"
+        return str(tag), phone_status, dn_status, mac
 
     def page(self, page=0, size=100):
         if type(size) is not int or not 1 <= size <= 1000:
@@ -754,8 +759,10 @@ class SectionAvailability:
             raise InvalidNetworkInput(
                 "Таблица целиком копируется до 10000 строк; используйте страницы."
             )
-        return "Номер\tephone\tephone-dn\n" + "\n".join(
-            "\t".join(self.row(tag)) for tag in range(self.first, self.last + 1)
+        return (
+            "\t".join(PAIR_HEADERS)
+            + "\n"
+            + "\n".join("\t".join(self.row(tag)) for tag in range(self.first, self.last + 1))
         )
 
 
@@ -778,8 +785,9 @@ def availability_report(result: SectionAvailability, page=0) -> tuple[str, int]:
         f"Не созданы секции ephone: {result.free_phones}; ephone-dn: {result.free_dns}.",
         "✓ секция не создана; ✗ секция существует, есть ссылка button или превышен max-dn.",
         "Одинаковые номера в строке - сравнение двух независимых списков, а не привязка аппарата к DN.",
+        PAIR_MAC_NOTE,
         "",
-        "Номер\tephone\tephone-dn",
+        "\t".join(PAIR_HEADERS),
         *("\t".join(row) for row in rows),
         "",
         "Статусы по вставленному снимку. Пустая секция и description FREE не освобождают номер секции.",
