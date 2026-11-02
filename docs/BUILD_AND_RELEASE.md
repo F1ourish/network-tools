@@ -61,7 +61,8 @@ Hash сравнивается с тем же asset релиза. Изменен�
 ## GitHub Actions и публикация
 
 Workflow запускается на ветках, pull requests, тегах v* и вручную.
-Linux проверяет Ruff и все non-GUI tests. Windows обязательно выполняет GUI
+Linux и publisher используют ubuntu-24.04: для закреплённого Python 3.12.10
+доступна соответствующая сборка. Linux проверяет Ruff и все non-GUI tests. Windows обязательно выполняет GUI
 и готовый EXE smoke. Ветка candidate позволяет проверить изменения до main.
 
 Для нового выпуска обновить __version__, changelog и release notes; сначала
