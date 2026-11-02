@@ -1,6 +1,6 @@
 # Сборка и выпуск Network Tools
 
-Версия документа: 2.6; дата: 15.10.2026; контур: Windows / GitHub Actions.
+Версия документа: 2.7; дата: 02.11.2026; контур: Windows / GitHub Actions.
 
 Выпуск проходит через тесты исходников, запуск готового EXE и проверку hashes.
 Публикуется точный source commit, для которого Windows job сформировал assets.
@@ -89,7 +89,7 @@ assets, версию, source commit, successful smoke и hash проверенн
 `gh release create` создаёт v<version> для точного github.sha и прикладывает
 четыре assets. Existing release/tag не перезаписывается; при занятой версии
 устранить причину и выпустить новую версию. Тег при отдельном tag build должен
-совпадать с __version__. Publisher выбирает docs/RELEASE_<версия>.md; для 1.9.1 - docs/RELEASE_1_8_0.md.
+совпадать с __version__. Publisher выбирает docs/RELEASE_<версия>.md; для 1.9.1 - docs/RELEASE_1_9_1.md.
 
 После выпуска проверить страницу Release, target commit, имена и hashes assets.
 GitHub artifact имеет retention; Release assets являются основной поставкой.

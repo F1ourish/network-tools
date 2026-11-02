@@ -15,6 +15,7 @@ class CMEReportView(ResizableArea):
         super().__init__(app, parent, height=100, vertical="top")
         self.app = app
         self.rows = ()
+        self._fit_job = None
         self.body.columnconfigure(0, weight=1)
         self.body.rowconfigure(0, weight=1)
         self.text_frame, self.text = app._text_widget(
@@ -30,8 +31,8 @@ class CMEReportView(ResizableArea):
         self.table_frame.columnconfigure(0, weight=1)
         self.table_frame.rowconfigure(1, weight=1)
         self.summary = tk.StringVar(app.root)
-        summary = ttk.Label(self.table_frame, textvariable=self.summary, padding=(0, 3))
-        summary.grid(row=0, column=0, columnspan=2, sticky="ew")
+        self.summary_label = ttk.Label(self.table_frame, textvariable=self.summary, padding=(0, 3))
+        self.summary_label.grid(row=0, column=0, columnspan=2, sticky="ew")
         self.table = ttk.Treeview(
             self.table_frame,
             columns=("number", "ephone", "dn", "mac"),
@@ -67,10 +68,25 @@ class CMEReportView(ResizableArea):
         self.table.bind("<Control-KeyPress>", self._table_key)
         self.table.bind("<Button-3>", self._table_menu)
         self.table.bind("<Shift-F10>", self._table_menu)
-        self.table_frame.bind(
-            "<Configure>", lambda event: summary.configure(wraplength=max(200, event.width - 12))
-        )
+        self.table_frame.bind("<Configure>", self._table_layout)
         self.table_frame.grid_remove()
+
+    def _table_layout(self, event):
+        self.summary_label.configure(wraplength=max(200, event.width - 12))
+        self._schedule_fit()
+
+    def _schedule_fit(self):
+        if self._fit_job is None:
+            self._fit_job = self.after_idle(self._fit_table)
+
+    def _fit_table(self):
+        self._fit_job = None
+        requested = max(100, self.table_frame.winfo_reqheight() + self.grip) if self.rows else 100
+        self.minimum_height = requested if self.rows else 48
+        if self.winfo_reqheight() != requested:
+            self.configure(height=requested)
+        if getattr(self.app, "cme_report_view", None) is self:
+            self.app._cme_limit_panes()
 
     def set_report(self, value, rows=()):
         self.app._set_text(self.text, value)
@@ -91,6 +107,7 @@ class CMEReportView(ResizableArea):
             for index, line in enumerate(value.splitlines(), 1):
                 if line.startswith(("ephone ", "ephone-dn ", "Переадресации:")):
                     self.text.tag_add("heading", f"{index}.0", f"{index}.end")
+        self._schedule_fit()
 
     def _table_key(self, event):
         if event.state & 1:
@@ -137,6 +154,8 @@ class CMEReportView(ResizableArea):
         (self.table if self.rows else self.text).focus_set()
 
     def destroy(self):
+        if self._fit_job is not None:
+            self.after_cancel(self._fit_job)
         if self.text in self.app._plain_text_widgets:
             self.app._plain_text_widgets.remove(self.text)
         super().destroy()

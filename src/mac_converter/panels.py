@@ -25,6 +25,7 @@ class ResizableArea(ttk.Frame):
         self.body = ttk.Frame(self)
         self.vertical_side, self.horizontal_side = vertical, side
         self.width_fraction = self.height_fraction = 1.0
+        self.minimum_height = 48
         self.resize_x = self.resize_y = None
         self.reset_x = self.reset_y = None
         self._drag = None
@@ -53,7 +54,9 @@ class ResizableArea(ttk.Frame):
     def _layout(self, _event=None):
         available_w, available_h = self.winfo_width(), self.winfo_height()
         width = min(available_w, max(100, round(available_w * self.width_fraction)))
-        height = min(available_h, max(48, round(available_h * self.height_fraction)))
+        height = min(
+            available_h, max(self.minimum_height, round(available_h * self.height_fraction))
+        )
         self._extent = width, height
         g = self.grip
         left = g if self.horizontal_side == "left" else 0
@@ -96,7 +99,7 @@ class ResizableArea(ttk.Frame):
 
         def move(delta):
             available = self.winfo_width() if axis == "x" else self.winfo_height()
-            minimum = 100 if axis == "x" else 48
+            minimum = 100 if axis == "x" else self.minimum_height
             extent = min(available, max(minimum, initial + (delta if positive else -delta)))
             setattr(
                 self,
@@ -203,8 +206,18 @@ def pane_split(panes, areas):
 
         def move(delta):
             height = panes.winfo_height()
-            low = max(80, areas[0].master.winfo_reqheight() - areas[0].winfo_reqheight() + 48)
-            last = max(110, areas[1].master.winfo_reqheight() - areas[1].winfo_reqheight() + 48)
+            low = max(
+                80,
+                areas[0].master.winfo_reqheight()
+                - areas[0].winfo_reqheight()
+                + areas[0].minimum_height,
+            )
+            last = max(
+                110,
+                areas[1].master.winfo_reqheight()
+                - areas[1].winfo_reqheight()
+                + areas[1].minimum_height,
+            )
             panes.sashpos(0, min(max(low, initial + delta), max(low, height - last)))
 
         return move

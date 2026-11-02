@@ -1643,6 +1643,11 @@ def run_ui_checks(binary: Path) -> tuple[list[str], list[dict]]:
                         assert mac_rows[1].split("\t")[3] == mac_rows[3].split("\t")[3] == "-"
                         keys(0x24)  # Home, then the occupied ephone row.
                         keys(0x28)
+                        mac_body, _ = cme_field(1)
+                        mac_bounds = window_bounds(mac_body)
+                        assert mac_bounds.bottom - mac_bounds.top >= 140, (
+                            "Compact CUCME table has no room for its headings and MAC rows"
+                        )
                         save_screenshot(hwnd, Path("smoke-results/cme-mac-table-night.png"))
                         keys(0x11, 0x0D)
                         report_hwnd = activate_cme_window("Отчёт CUCME")

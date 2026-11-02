@@ -191,6 +191,7 @@ class CMEPanel:
             ),
         )
         self.cme_panes.bind("<ButtonRelease-1>", self._cme_limit_panes)
+        self.cme_panes.bind("<Configure>", self._cme_limit_panes)
         for widget in (
             self.cme_query_entry,
             self.cme_first_entry,
@@ -225,7 +226,14 @@ class CMEPanel:
     def _cme_limit_panes(self, _event=None):
         height = self.cme_panes.winfo_height()
         if height > 220:
-            self.cme_panes.sashpos(0, min(max(90, self.cme_panes.sashpos(0)), height - 130))
+            view = self.cme_report_view
+            output_minimum = (
+                view.master.winfo_reqheight() - view.winfo_reqheight() + view.minimum_height
+            )
+            position = self.cme_panes.sashpos(0)
+            limited = min(max(90, position), max(90, height - max(130, output_minimum)))
+            if limited != position:
+                self.cme_panes.sashpos(0, limited)
 
     def focus_cme_config(self, _event=None):
         self.cme_config_input.focus_set()

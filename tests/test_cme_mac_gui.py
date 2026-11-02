@@ -74,3 +74,23 @@ def test_replacing_config_removes_old_mac_from_main_and_expanded_results(app):
         text = widget.get("1.0", "end-1c")
         assert "MAC-адрес аппарата: не указан в конфигурации" in text
         assert "0011.2233.4455" not in text
+
+
+def test_compact_table_keeps_mac_rows_visible_after_resize_and_sash_drag(app):
+    load(app)
+    app.cme_mode.set("free")
+    app.cme_first.set("584")
+    app.cme_last.set("586")
+    for size in ("1024x728", "940x690", "1280x900", "1024x728"):
+        app.root.geometry(size)
+        app.root.update()
+        app.cme_panes.sashpos(0, app.cme_panes.winfo_height() - 110)
+        app._cme_limit_panes()
+        app.root.update()
+        table = app.cme_table
+        item = table.get_children()[1]
+        table.see(item)
+        app.root.update()
+        bounds = table.bbox(item, "mac")
+        assert bounds and bounds[1] + bounds[3] <= table.winfo_height()
+        assert table.item(item, "values")[3] == "0011.2233.4455"
