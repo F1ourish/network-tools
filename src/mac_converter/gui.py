@@ -1,5 +1,6 @@
 """Themed desktop tools; calculation rules are separate from widgets."""
 
+from ipaddress import IPv4Network
 from pathlib import Path
 import re
 import tkinter as tk
@@ -42,9 +43,12 @@ from .network import (
     check_wildcard,
     host_page,
     lookup_routes,
+    prefix_from_mask,
 )
 from .mtu import BASES, CIPHERS, PROFILES, MtuOptions, calculate_mtu
 from .settings import ThemeSettings
+
+IPV4_MASK_CHOICES = tuple(f"/{prefix} - {IPv4Network((0, prefix)).netmask}" for prefix in range(33))
 
 
 class OutputTable:
@@ -310,7 +314,7 @@ class MacConverterApp(CMEPanel):
             else:
                 self._syncing_ipv4 = True
                 self.ipv4_address.set(str(result.address))
-                self.ipv4_mask.set(f"/{result.network.prefixlen}")
+                self.ipv4_mask.set(IPV4_MASK_CHOICES[result.network.prefixlen])
                 self._syncing_ipv4 = False
                 self._ipv4_update()
                 return "break"
@@ -465,7 +469,7 @@ class MacConverterApp(CMEPanel):
 
     def _build_ipv4(self, page):
         self.ipv4_address = tk.StringVar(self.root, value="192.168.1.0")
-        self.ipv4_mask = tk.StringVar(self.root, value="/24")
+        self.ipv4_mask = tk.StringVar(self.root, value=IPV4_MASK_CHOICES[24])
         self.ipv4_strict = tk.BooleanVar(self.root, value=False)
         self.ipv4_note = tk.StringVar(self.root)
         self.ipv4_error = tk.StringVar(self.root)
@@ -475,8 +479,9 @@ class MacConverterApp(CMEPanel):
         inputs.columnconfigure(1, weight=2)
         self.ipv4_entry = self._field(inputs, "IPv4 / сеть", self.ipv4_address)
         self.ipv4_mask_entry = self._field(
-            inputs, "Маска / префикс", self.ipv4_mask, 1, values=[f"/{p}" for p in range(33)]
+            inputs, "Маска / префикс", self.ipv4_mask, 1, values=IPV4_MASK_CHOICES
         )
+        self.ipv4_mask_entry.configure(postcommand=self._ipv4_mask_menu)
         self.ipv4_entry.bind("<FocusOut>", self._normalize_ipv4)
         self.ipv4_entry.bind("<Return>", self._normalize_ipv4)
         options = ttk.Frame(page)
@@ -2023,6 +2028,15 @@ class MacConverterApp(CMEPanel):
         self.copy_button.state(["!disabled"])
         self.status.set("Ready")
 
+    def _ipv4_mask_menu(self):
+        value = self.ipv4_mask.get().strip()
+        if value not in IPV4_MASK_CHOICES:
+            try:
+                prefix = prefix_from_mask(value)
+            except InvalidNetworkInput:
+                return
+            self.ipv4_mask.set(IPV4_MASK_CHOICES[prefix])
+
     def _ipv4_mask_changed(self, *_args):
         if self._syncing_ipv4:
             return
@@ -2036,9 +2050,12 @@ class MacConverterApp(CMEPanel):
         if self._syncing_ipv4:
             return
         try:
+            mask = self.ipv4_mask.get().strip()
+            if mask in IPV4_MASK_CHOICES:
+                mask = f"/{IPV4_MASK_CHOICES.index(mask)}"
             result = calculate_ipv4(
                 self.ipv4_address.get(),
-                self.ipv4_mask.get(),
+                mask,
                 require_network=self.ipv4_strict.get(),
             )
         except InvalidNetworkInput as error:
@@ -2061,7 +2078,7 @@ class MacConverterApp(CMEPanel):
             return
         if "/" in self.ipv4_address.get():
             self._syncing_ipv4 = True
-            self.ipv4_mask.set(f"/{result.network.prefixlen}")
+            self.ipv4_mask.set(IPV4_MASK_CHOICES[result.network.prefixlen])
             self._syncing_ipv4 = False
         self.ipv4_calculation = result
         self.ipv4_addresses_table.update(result.rows())

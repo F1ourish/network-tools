@@ -5,7 +5,7 @@ ACL интерфейса in/out, генератор паролей, кандид
 Восемь вкладок, дневная и ночная темы, расчёт при вводе и
 копирование результатов. Для готового EXE установка Python не требуется.
 
-[Скачать релиз v1.9.1](https://github.com/F1ourish/network-tools/releases/tag/v1.9.1).
+[Скачать релиз v1.9.2](https://github.com/F1ourish/network-tools/releases/tag/v1.9.2).
 
 Крупные поля в маршрутах, ACL, свободных IP и CUCME заполняют свободное место окна.
 Полоска у горизонтального края меняет высоту, у бокового - ширину, угол - оба размера.
@@ -13,16 +13,15 @@ ACL интерфейса in/out, генератор паролей, кандид
 **«Развернуть»** или Ctrl+Enter открывает поле отдельно; Escape возвращает во вкладку.
 Развёрнутые редакторы синхронизируются с вкладкой, результаты обновляются вместе с расчётом.
 В ZIP находятся EXE, краткая инструкция, лицензии и отчёт проверки.
-Отдельно доступны EXE и `SHA256SUMS.txt`. [Проверка сборки](https://github.com/F1ourish/network-tools/actions/runs/41474896905):
-842 теста, включая 180 GUI, и 83 проверки готового EXE.
-Подробнее: [отчёт проверки](docs/VALIDATION_1_9_1.md).
+Отдельно доступны EXE и `SHA256SUMS.txt`. Версия 1.9.2 подготовлена;
+проверка Windows и публикация ожидаются. [Отчёт проверки](docs/VALIDATION_1_9_2.md).
 
 ## Возможности
 
 | Вкладка | Возможности и пример |
 | --- | --- |
 | MAC | Cisco, Colon, Hyphen, Plain; lowercase/uppercase. `0011.2233.aabb` → `00:11:22:33:aa:bb` |
-| IPv4 | IP или CIDR, выбор `/0`-`/32` или полная маска; subnet, binary mask, wildcard, broadcast, диапазон и страницы хостов. По умолчанию `192.168.1.0/24` |
+| IPv4 | IP или CIDR, выбор `/0`-`/32` с полной маской в каждом пункте (например `/24 - 255.255.255.0`), ручной ввод префикса или полной маски; subnet, binary mask, wildcard, broadcast, диапазон и страницы хостов. По умолчанию `192.168.1.0/24` |
 | MTU / MSS | IP MTU / Ethernet payload / кадр с FCS; dot1q/QinQ, PPPoE, IP-in-IP, GRE, WireGuard, VXLAN, ESP, OpenVPN UDP AEAD и L2TP/IPsec; состав overhead и MSS |
 | Маршруты | Список CIDR с подписями, longest prefix match, все совпадения и равные наиболее специфичные кандидаты |
 | ACL | Два постоянных списка Cisco IOS IPv4 ACL in/out одного интерфейса; автоматический выбор списка для запроса и ответа по стороне интерфейса; списки до 10 портов после eq/neq; source/destination, TCP/UDP, порты, первый permit/deny, sequence number, implicit deny и причина решения. Большой редактор, номера и подсветка строк, очистка полного вывода, IP-группы, флажки отсутствия ACL и подсказки Cisco in/out. Проверка одного wildcard сохранена отдельно |
@@ -138,7 +137,7 @@ Ctrl+Shift+C - отчёт страницы. Таблица копируется 
 
 ## Интерфейс
 
-Проверка версии 1.9.1: [отчёт](docs/VALIDATION_1_9_1.md). Снимки CUCME ниже относятся к версии 1.8.0; в 1.8.1 кнопки подписаны «Развернуть» и добавлены общие захваты изменения размера.
+Проверка версии 1.9.2: [отчёт](docs/VALIDATION_1_9_2.md). Снимки CUCME ниже относятся к версии 1.8.0; в 1.8.1 кнопки подписаны «Развернуть» и добавлены общие захваты изменения размера.
 
 Рабочая область растёт вместе с окном; разделитель меняет размеры ввода и результата.
 
@@ -352,13 +351,13 @@ py -3.12 -m venv .venv
 Linux проверяет логику командой `python -m pytest -q -m "not gui"`.
 Без Tk-дисплея обычный pytest пропускает GUI; `--require-gui` запрещает такой пропуск.
 
-Результаты проверок версии 1.9.1 фиксируются в
-[отчёте проверки](docs/VALIDATION_1_9_1.md). Полный набор pytest и запуск готового
+Результаты проверок версии 1.9.2 фиксируются в
+[отчёте проверки](docs/VALIDATION_1_9_2.md). Полный набор pytest и запуск готового
 EXE выполняются на Windows; CI публикует только проверенную сборку.
 Фактические числа тестов, исходный commit и среда находятся в
-[`RELEASE_VERIFICATION.json`](https://github.com/F1ourish/network-tools/releases/download/v1.9.1/RELEASE_VERIFICATION.json);
+[`RELEASE_VERIFICATION.json`](https://github.com/F1ourish/network-tools/releases/download/v1.9.2/RELEASE_VERIFICATION.json);
 контрольные суммы - в
-[`SHA256SUMS.txt`](https://github.com/F1ourish/network-tools/releases/download/v1.9.1/SHA256SUMS.txt).
+[`SHA256SUMS.txt`](https://github.com/F1ourish/network-tools/releases/download/v1.9.2/SHA256SUMS.txt).
 
 [Процедура выпуска](docs/BUILD_AND_RELEASE.md), [архитектура](docs/ARCHITECTURE.md),
 [клиентская проверка](docs/TESTING.md). Целевая среда - Windows 10/11 x64;

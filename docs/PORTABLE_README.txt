@@ -1,10 +1,11 @@
-Network Tools 1.9.1 - Windows x64
+Network Tools 1.9.2 - Windows x64
 
 Распаковать ZIP и запустить NetworkTools.exe.
 Установка Python не требуется. Можно перенести один EXE в пользовательский каталог.
 
 MAC: 4 формата и выбор регистра.
 IPv4: сеть/IP, маска или CIDR, wildcard, binary mask, broadcast и страницы хостов.
+В меню масок видны оба обозначения: /24 - 255.255.255.0; ручной ввод сохранён.
 MTU/MSS: IP/L2 размер, dot1q/QinQ, PPPoE, GRE, WireGuard, VXLAN, ESP, OpenVPN, L2TP/IPsec.
 Выбрать профиль и параметры; показать overhead, внутренний MTU, MSS и кадр с FCS.
 Маршруты: longest prefix match в введённом списке CIDR.

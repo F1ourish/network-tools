@@ -8,7 +8,20 @@ pytestmark = pytest.mark.gui
 
 def test_ipv4_default_and_copy_all(app):
     assert app.ipv4_address.get() == "192.168.1.0"
-    assert app.ipv4_mask.get() == "/24"
+    assert app.ipv4_mask.get() == "/24 - 255.255.255.0"
+    assert app.ipv4_mask_entry.current() == 24
+    choices = tuple(app.ipv4_mask_entry.cget("values"))
+    assert len(choices) == 33
+    assert choices[0] == "/0 - 0.0.0.0"
+    assert choices[24] == "/24 - 255.255.255.0"
+    assert choices[32] == "/32 - 255.255.255.255"
+    for prefix, label in enumerate(choices):
+        app.ipv4_mask_entry.current(prefix)
+        assert app.ipv4_calculation.network.prefixlen == prefix
+        mask = app.ipv4_mask_table.values["Полная маска"].get()
+        assert label == f"/{prefix} - {mask}"
+        assert app.ipv4_error.get() == ""
+    app.ipv4_mask_entry.current(24)
     assert app.ipv4_addresses_table.values["Первый хост"].get() == "192.168.1.1"
     assert app.ipv4_binary.get() == "11111111.11111111.11111111.00000000"
     app.ipv4_copy_button.invoke()
@@ -29,6 +42,13 @@ def test_ipv4_invalid_mask_clears_all_results_and_recovers(app):
     app.ipv4_mask.set("255.255.255.0")
     assert app.ipv4_calculation.network.prefixlen == 24
     assert app.ipv4_error.get() == ""
+    app._ipv4_mask_menu()
+    assert app.ipv4_mask_entry.current() == 24
+    for manual in ("24", "/24", "255.255.255.0"):
+        app.ipv4_mask.set(manual)
+        assert app.ipv4_calculation.network.prefixlen == 24
+        app._ipv4_mask_menu()
+        assert app.ipv4_mask.get() == "/24 - 255.255.255.0"
 
 
 def test_ipv4_network_only_validation_and_host_normalization(app):
@@ -49,7 +69,7 @@ def test_cidr_paste_is_atomic_and_following_mask_change_applies(app):
     app.ipv4_entry.event_generate("<<Paste>>")
     app.root.update()
     assert app.ipv4_address.get() == "10.20.30.40"
-    assert app.ipv4_mask.get() == "/16"
+    assert app.ipv4_mask.get() == "/16 - 255.255.0.0"
     assert str(app.ipv4_calculation.network) == "10.20.0.0/16"
     app.ipv4_mask.set("/24")
     assert str(app.ipv4_calculation.network) == "10.20.30.0/24"
@@ -61,7 +81,7 @@ def test_cidr_typing_does_not_erase_a_partial_prefix(app):
     app.ipv4_address.set("10.20.30.40/2")
     assert app.ipv4_address.get().endswith("/2")
     app.ipv4_address.set("10.20.30.40/24")
-    assert app.ipv4_mask.get() == "/24"
+    assert app.ipv4_mask.get() == "/24 - 255.255.255.0"
     app._normalize_ipv4()
     assert app.ipv4_address.get() == "10.20.30.40"
 

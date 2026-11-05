@@ -723,6 +723,24 @@ def run_ui_checks(binary: Path) -> tuple[list[str], list[dict]]:
                         checks.append(
                             "IPv4 defaults: subnet, hosts, broadcast, full/binary mask and wildcard"
                         )
+                        focus_control(1)
+                        keys(0x12, 0x28)  # Alt+Down opens the editable mask combobox.
+                        save_screenshot(hwnd, Path("smoke-results/ipv4-mask-menu-day.png"))
+                        keys(0x1B)
+                        for prefix, mask in (
+                            (0, "0.0.0.0"),
+                            (25, "255.255.255.128"),
+                            (32, "255.255.255.255"),
+                            (24, "255.255.255.0"),
+                        ):
+                            select_choice(1, prefix)
+                            keys(0x11, ord("A"))
+                            keys(0x11, ord("C"))
+                            wait_until(lambda: read_clipboard() == f"/{prefix} - {mask}")
+                            copy_tool(f"Префикс: /{prefix}", f"Полная маска: {mask}")
+                        checks.append(
+                            "IPv4 mask menu EXE: prefix and dotted mask are visible together; actual dropdown selection calculates /0, /25, /32 and restores /24"
+                        )
                         focus_control(28)
                         keys(0x20)
                         host_hwnd = wait_until(lambda: find_window(isolated.resolve(), "Адреса: "))
