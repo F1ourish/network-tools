@@ -143,7 +143,9 @@ def test_standard_paste_replaces_selection_once_and_preserves_caret(app):
 def test_cidr_paste_button_applies_address_and_prefix_atomically(app):
     clipboard(app, "203.0.113.7/16")
     app.ipv4_entry.paste_button.invoke()
-    assert app.ipv4_address.get() == "203.0.113.7" and app.ipv4_mask.get() == "/16"
+    assert app.ipv4_address.get() == "203.0.113.7"
+    assert app.ipv4_mask.get() == "/16 - 255.255.0.0"
+    assert app.ipv4_mask_entry.current() == 16
     assert str(app.ipv4_calculation.network) == "203.0.0.0/16"
 
 
